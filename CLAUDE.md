@@ -4,6 +4,25 @@
 - Name: Nathaniel
 - Email: nate.adams.nh@gmail.com
 - Platform: Windows (use `python`, not `python3`)
+- Last updated: 2026-05-30
+
+---
+
+## Git Repository
+- URL: https://github.com/nateadamsnh/Claude
+- Local: `C:\Users\Nathaniel\Documents\Trading`
+- Credentials and runtime state files are gitignored (never committed)
+
+---
+
+## Alpaca Account
+- Type: **Paper trading** (not live money)
+- Credentials: `C:\Users\Nathaniel\Documents\Trading\config\alpaca_credentials.json`
+- Broker endpoint: `https://paper-api.alpaca.markets/v2`
+- Data endpoint: `https://data.alpaca.markets`
+- API Key: PK47VMLQGKAOFSWZU3RPAMPL5M
+- **Portfolio value: $51,588.76** | **Cash: $7,276.24** (as of 2026-05-30)
+- Options Level: 3
 
 ---
 
@@ -29,23 +48,18 @@ python main.py
 ```
 Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourly Mon-Fri 9:30 AM–6 PM.
 
-### Alpaca Account
-- Type: **Paper trading** (not live money)
-- Credentials: `C:\Users\Nathaniel\Documents\Trading\config\alpaca_credentials.json`
-- Endpoint: `https://paper-api.alpaca.markets/v2`
-- API Key: PK47VMLQGKAOFSWZU3RPAMPL5M
+### Politicians Tracked (current — as of 2026-05-30)
+| Name | ID | Party | Notes |
+|------|----|-------|-------|
+| Nancy Pelosi | P000197 | Democrat | 44 trades, $97.81M volume. NVDA, AAPL, GOOGL, AMZN focus. $3M+ documented gains, 133% on Broadcom options. |
+| Cleo Fields | F000110 | Democrat | 222 trades, $22.74M volume. Pure Magnificent 7 — NVDA (44), GOOGL (26), AAPL (20), MSFT (16). IT sector 61%. Bought ORCL before Trump TikTok exec order. |
+| Ro Khanna | K000389 | Democrat | 12,548 trades, $211.18M volume. Very active — JPM, AMZN, Meta, Micron, GOOGL. High signal volume, watch for noise. |
+
+**Removed (inactive/left Congress):** Warren Davidson, Terri Sewell, Bryan Steil, Nick LaLota, Michael McCaul, Marjorie Taylor Greene (resigned Jan 5, 2026)
 
 ### Configuration Highlights
 - Trade amount: **$500/trade** (fixed, scale_by_size: false)
-- 7 politicians tracked:
-  - Warren Davidson (D000626) — +78.8% in 2025
-  - Terri Sewell (S001185) — +67.9% in 2025
-  - Bryan Steil (S001213) — +62.5% in 2025
-  - Nick LaLota (L000598) — +61.6% in 2025
-  - Nancy Pelosi (P000197)
-  - Michael McCaul (M001157)
-  - Ro Khanna (K000389)
-- Skip keywords: treasury, t-bill, bond, note, bill, mutual fund, money market, etf, trust, index, cboe
+- Skip keywords: treasury, t-bill, bond, note, bill, mutual fund, money market, etf, trust, index, xsp, mini spx, cboe
 - Gain milestone alerts: 5%, 10%, 25%, 50%, 100%
 - Loss alert: -10%
 
@@ -95,45 +109,75 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 
 ---
 
-## Email Config
-- Location: `C:\Users\Nathaniel\Documents\Trading\config\email_config.json`
-- SMTP: Gmail (smtp.gmail.com:587)
-- **Status: FUNCTIONAL** — app_password set (tpvwyaxrngdekruz). Sends HTML email on copy-trader events.
+## Strategy Manager (Portfolio Stop-Loss)
+
+**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\strategy_manager.py`
+**Status: LIVE** — runs via Task Scheduler ("StrategyManager") every minute Mon-Fri 9:30 AM–6 PM
+**State:** `C:\Users\Nathaniel\Documents\Trading\strategies\states\{SYMBOL}_state.json` (per symbol)
+
+### What It Does
+- Monitors 29 holdings with GTC stop-loss orders
+- Trailing stop: raises floor once position gains ≥10% (trails 5% below highest price)
+- Ladder buy: adds 2× position at -20% from entry price
+- Kill-switch: -10% daily equity → close all positions
+
+### Current Portfolio (as of 2026-05-30)
+| Symbol | Qty | Entry | P&L |
+|--------|-----|-------|-----|
+| IBM | 2.00 | $249.58 | +19.3% |
+| ORCL | 2.64 | $189.52 | +19.1% |
+| PLTR | 14 | $132.03 | +18.6% |
+| IONQ | 31 | $62.27 | +15.7% |
+| MSFT | 4 | $411.90 | +9.3% |
+| EMR | 3.71 | $134.87 | +6.6% |
+| IAU | 100 | $83.21 | +2.7% |
+| CARR | 7.99 | $62.58 | +2.1% |
+| BAC | 9.75 | $51.26 | +0.7% |
+| LMT | 3 | $527.53 | +0.6% |
+| CVX | 10 | $182.01 | +0.2% |
+| BND | 27 | $73.29 | +0.2% |
+| NVDA | 9 | $211.98 | -0.4% |
+| XLE | 34 | $56.65 | -0.6% |
+| MA | 1.00 | $498.94 | -1.0% |
+| XOM | 13 | $146.84 | -1.1% |
+| BRK.B | 2.08 | $479.69 | -1.1% |
+| SOXX | 3 | $576.53 | -1.3% |
+| V | 1.51 | $331.16 | -1.5% |
+| VNQ | 20 | $97.27 | -1.6% |
+| O | 32 | $62.31 | -1.7% |
+| LOW | 2.29 | $218.01 | -1.7% |
+| BWXT | 10 | $199.58 | -1.9% |
+| RKLB | 13 | $146.20 | -1.9% |
+| GOOGL | 5 | $388.44 | -2.1% |
+| INTC | 4.23 | $118.10 | -2.9% |
+| SYK | 1.59 | $314.52 | -3.0% |
+| ACI | 30.58 | $16.35 | -4.5% |
+| PM | 2.66 | $188.10 | -5.7% |
+
+**Open orders:** 29 GTC stop-loss orders active | 1 limit buy: URA @ $48
+
+### Logs
+`C:\Users\Nathaniel\Documents\Trading\logs\strategy_manager.log` (via portfolio_monitor.py)
 
 ---
 
-## Options / Wheel Strategy
+## Options / Wheel Strategy (QBTS)
 
 **Status: LIVE** — built 2026-05-26
-**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\wheel_strategy.py`
-**State:** `C:\Users\Nathaniel\Documents\Trading\config\wheel_state.json`
-**Logs:** `C:\Users\Nathaniel\Documents\Trading\logs\wheel_strategy.log`
+**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\qbts_wheel_strategy.py`
+**State:** `C:\Users\Nathaniel\Documents\Trading\strategies\qbts_wheel_state.json`
+**Logs:** `C:\Users\Nathaniel\Documents\Trading\logs\qbts_wheel.log`
 
-### How to Run
-```
-cd C:\Users\Nathaniel\Documents\Trading\strategies
-python wheel_strategy.py [scan|execute|monitor] [SYMBOL ...]
-```
+**Discontinued:** TSLA wheel strategy (removed)
 
-### Modes
-| Mode | Purpose |
-|------|---------|
-| `scan` | Scan default symbols for CSP/CC opportunities, ranked by annualized return |
-| `execute` | Interactive — show scan, prompt to place limit order |
-| `monitor` | Show live options positions, stock CC eligibility, expiry alerts, state P&L |
-
-### Current Status (as of 2026-05-26)
-- **QBTS** (100 shares) stopped out May 26 @ $27.68 — no longer held
-- All 14 remaining positions are fractional → no covered-call candidates yet
-- **Primary strategy: Cash-Secured Puts (CSPs)**
-- Account cash available: **$42,881.57** | Options Level: **3**
-
-### CSP Scan Parameters
-- DTE window: 10–60 days (sweet spot ~30d for theta decay)
-- OTM minimum: strike ≥3% below current price
-- Spread filter: bid-ask spread ≤25% of mid (liquidity)
-- Max contracts: 5 per position (capital limit)
-- Default symbols: QBTS, IONQ, SOXL, INTC
+### Current QBTS Wheel Status (as of 2026-05-30)
+- **Stage:** CSP — hunting for new cash-secured put
+- **Active contract:** None (cycle 1 complete)
+- **Cycle count:** 1
+- **Total premium collected (net):** $325.00
+  - Sold QBTS260605P00025000 @ $1.08 → +$540
+  - BTC at 60% profit @ $0.43 → -$215
+- **Shares held:** 0 (not yet assigned)
 
 ### Wheel Strategy Flow
 1. **Sell Cash-Secured Put** → collect premium; cash (strike × 100) reserved as collateral
@@ -141,13 +185,100 @@ python wheel_strategy.py [scan|execute|monitor] [SYMBOL ...]
 3. **Assigned** → own 100 shares at effective cost = strike − premium collected
 4. **Sell Covered Call** → collect premium on 100 shares held; repeat or get called away for profit
 
-### Cheapest Path to 2nd Covered Call Position
-- ACI (~$16/share) — need ~70 more shares ≈ $1,135 additional investment
+### CSP Scan Parameters
+- DTE window: 10–60 days (sweet spot ~30d for theta decay)
+- OTM minimum: strike ≥3% below current price
+- Spread filter: bid-ask spread ≤25% of mid (liquidity)
+- Max contracts: 5 per position (capital limit) — scaled by Markov regime
+- Default symbols: QBTS, IONQ, SOXL, INTC
+
+### Wheel Candidate Scan
+**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\wheel_candidate_scan.py`
+**Email:** `C:\Users\Nathaniel\Documents\Trading\strategies\wheel_scan_email.py`
+Scans UBER, F, SMCI, DKNG, SOFI, RIVN, MARA — runs Monday 9:35 AM, emails at 9:50 AM
 
 ### Alpaca Options API
 - Snapshots: `https://data.alpaca.markets/v1beta1/options/snapshots/{SYMBOL}?feed=indicative&type=put`
+- Contracts: `GET https://paper-api.alpaca.markets/v2/options/contracts`
 - Order: `POST /v2/orders` — `{symbol, qty, side:"sell", type:"limit", time_in_force:"day", limit_price}`
 - OCC parsing: `re.match(r'^([A-Z.]+)(\d{6})([CP])(\d{8})$', sym)` — strike = `int(strike_str) / 1000`
+- IV field in snapshots: `snapshot["impliedVolatility"]` (NOT `greeks["iv"]`)
+
+### Logs
+`C:\Users\Nathaniel\Documents\Trading\logs\qbts_wheel.log`
+
+---
+
+## Markov Regime Detector
+
+**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\regime_detector.py`
+**State:** `C:\Users\Nathaniel\Documents\Trading\strategies\regime_state.json`
+
+### How It Works
+- Fetches 220 days of SPY bars via Alpaca SIP feed
+- Classifies market into 3 states based on SPY vs 200-day SMA:
+  - **BULL** (SPY > SMA200): Full wheel contracts (5 max)
+  - **CAUTION** (0–2% below SMA200): Half contracts (2 max)
+  - **BEAR** (>2% below SMA200): No new puts — wheel paused
+- Used by qbts_wheel_strategy.py before selling new CSPs
+
+### Current Reading (as of 2026-05-29)
+- **Regime: BULL** | SPY $750.46 | SMA200 $680.01 | +10.4% above
+
+---
+
+## Signal Monitoring System
+
+**Location:** `C:\Users\Nathaniel\Documents\Trading\signals\`
+**Shared utilities:** `signal_utils.py` — logging, state load/save (atomic), email sending, shared constants
+**State files:** `signals/states/{monitor}.json` (gitignored — runtime data)
+
+### All 10 Signal Monitors
+| Script | Schedule | Source | What It Watches |
+|--------|----------|--------|-----------------|
+| `signal_digest.py` | 8:30 AM Mon-Fri | All | Morning summary email — portfolio + all signals |
+| `earnings_calendar.py` | 8:00 AM Mon-Fri | Alpaca corporate actions | Warns 2d and 1d before any holding reports earnings |
+| `contract_awards.py` | 6:00 PM Mon-Fri | USASpending.gov | Federal contracts ≥$1M for LMT, BWXT, RKLB, PLTR, IBM, MSFT, NVDA, IONQ |
+| `insider_trades.py` | Every 2h market hours | SEC Form 4 RSS | CEO/director buying in portfolio holdings (≥$10K) |
+| `hedge_fund_13f.py` | Monday 7:00 AM | SEC EDGAR | New 13F filings from Buffett, Ackman, Burry, Citadel, etc. |
+| `activist_monitor.py` | Every 4h market hours | SEC EDGAR 13D/13G | Activists taking 5%+ stakes in portfolio holdings |
+| `etf_flows.py` | 9:45 AM Mon-Fri | Alpaca Data | Unusual volume (>2x 20d avg) in SOXX, XLE, XLK, VNQ, ITA, ARKK |
+| `short_interest.py` | Mon & Wed 7:30 AM | FINRA | Squeeze setups (SI drops >20%) or bear warnings (SI rises >30%) |
+| `unusual_options.py` | Every 30min market hours | Alpaca Options | IV spikes (>1.8x hist vol) or put/call skew >1.6 in holdings |
+| `senate_disclosures.py` | Every 2h market hours | Capitol Trades | Warner, Tuberville, Rounds, Sullivan, Hoeven trades → $500 copied |
+
+### Hedge Funds Tracked (13F)
+Berkshire (0001067983), Pershing Square (0001336528), Scion (0001649339),
+Appaloosa (0001006438), Third Point (0001040273), Duquesne (0001536411),
+Tiger Global (0001167483), Citadel (0001423298)
+
+### Task Scheduler Folder
+All signal tasks live under `\Alpaca\Signals\` in Windows Task Scheduler.
+
+---
+
+## Email Config
+- Location: `C:\Users\Nathaniel\Documents\Trading\config\email_config.json`
+- SMTP: Gmail (smtp.gmail.com:587)
+- **Status: FUNCTIONAL** — app_password configured. Sends HTML email on all signal events.
+
+---
+
+## Key File Locations
+| Purpose | Path |
+|---------|------|
+| Alpaca credentials | `config\alpaca_credentials.json` |
+| Email config | `config\email_config.json` |
+| Politician config | `politician-copy-trader\config.json` |
+| Politician state | `politician-copy-trader\state.json` |
+| QBTS wheel state | `strategies\qbts_wheel_state.json` |
+| Regime state | `strategies\regime_state.json` |
+| Per-symbol stop states | `strategies\states\{SYMBOL}_state.json` |
+| Signal states | `signals\states\{monitor}.json` |
+| Copy trader log | `logs\copy_trader.log` |
+| Strategy manager log | `logs\portfolio_monitor.log` |
+| QBTS wheel log | `logs\qbts_wheel.log` |
+| Signal logs | `logs\{monitor}.log` |
 
 ---
 
@@ -155,6 +286,7 @@ python wheel_strategy.py [scan|execute|monitor] [SYMBOL ...]
 - `C:\Users\Nathaniel\Desktop\MCP_Trading_Servers.html`
 - `C:\Users\Nathaniel\Desktop\Investment_Opportunities_2026.html`
 - `C:\Users\Nathaniel\Desktop\TradingBackup_2026-05-23_15-00.zip`
+- `C:\Users\Nathaniel\Documents\Trading\TRADING_SOURCES.html` — full signal source reference
 
 ---
 
