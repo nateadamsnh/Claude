@@ -1,0 +1,14 @@
+{
+  "symbol": "ORCL",
+  "fill_price": 189.52,
+  "highest_price": 225.84,
+  "stop_order_id": "d4e567a3-be88-499c-95d7-d8b315dc7ca7",
+  "stop_price": 214.55,
+  "trailing_active": true,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.638243984
+}

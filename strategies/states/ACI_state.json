@@ -1,0 +1,14 @@
+{
+  "symbol": "ACI",
+  "fill_price": 16.35,
+  "highest_price": 16.42,
+  "stop_order_id": "4caeedeb-a3ca-4bef-8812-afb8f9e36fb9",
+  "stop_price": 14.72,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 30,
+  "initial_qty": 30.581039755
+}

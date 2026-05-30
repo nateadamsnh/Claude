@@ -1,0 +1,14 @@
+{
+  "symbol": "IONQ",
+  "fill_price": 62.27129,
+  "highest_price": 72.07,
+  "stop_price": 68.47,
+  "stop_order_id": "2ff7b39c-4c1c-4582-a608-7f73f2cd214e",
+  "whole_qty": 31,
+  "initial_qty": 31.0,
+  "trailing_active": true,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

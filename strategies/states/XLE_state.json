@@ -1,0 +1,14 @@
+{
+  "symbol": "XLE",
+  "fill_price": 56.649118,
+  "highest_price": 56.72,
+  "stop_price": 50.98,
+  "stop_order_id": "f801babb-8c84-45f8-a9ad-a840c4378c24",
+  "whole_qty": 34,
+  "initial_qty": 34.0,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

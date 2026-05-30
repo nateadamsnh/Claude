@@ -1,0 +1,14 @@
+{
+  "symbol": "BAC",
+  "fill_price": 51.26,
+  "highest_price": 52.125,
+  "stop_order_id": "358aad1f-b8f7-4496-afaf-80a0665ca947",
+  "stop_price": 46.13,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 9,
+  "initial_qty": 9.754194303
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "CARR",
+  "fill_price": 62.58,
+  "highest_price": 65.24,
+  "stop_order_id": "f2f11f88-855e-4958-b254-d779225d527d",
+  "stop_price": 56.32,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 7,
+  "initial_qty": 7.98977309
+}

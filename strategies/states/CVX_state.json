@@ -1,0 +1,14 @@
+{
+  "symbol": "CVX",
+  "fill_price": 182.015,
+  "highest_price": 182.61,
+  "stop_price": 163.81,
+  "stop_order_id": "277a05df-c14b-46ab-93a5-1e8e658b1e68",
+  "whole_qty": 10,
+  "initial_qty": 10.0,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

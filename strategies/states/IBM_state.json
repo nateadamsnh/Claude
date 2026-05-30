@@ -1,0 +1,14 @@
+{
+  "symbol": "IBM",
+  "fill_price": 249.58,
+  "highest_price": 300.56,
+  "stop_order_id": "87e4ced7-1d93-4a21-8e83-4604a62fcb27",
+  "stop_price": 285.53,
+  "trailing_active": true,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.003365654
+}

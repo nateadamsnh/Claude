@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Signal Sources — Nathaniel's Trading System</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      padding: 30px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #ffffff;
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+    .tier-label {
+      font-size: 20px;
+      font-weight: bold;
+      margin: 30px 0 12px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .tier-1 { background: #1a3a2a; color: #4caf50; }
+    .tier-2 { background: #2a2a1a; color: #ffc107; }
+    .tier-3 { background: #2a1a1a; color: #ef5350; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+    .card {
+      background: #1a1d26;
+      border: 1px solid #2a2d3a;
+      border-radius: 10px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #4a90d9; }
+    .card-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 10px;
+    }
+    .card-number {
+      background: #2a2d3a;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: bold;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+    .card-subtitle {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      margin-left: auto;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-free     { background: #1a3a2a; color: #4caf50; }
+    .badge-freemium { background: #2a2a1a; color: #ffc107; }
+    .badge-paid     { background: #2a1a1a; color: #ef5350; }
+
+    .card p { font-size: 13.5px; color: #ccc; margin-bottom: 10px; }
+
+    .info-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-top: 10px;
+    }
+    .info-pill {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: #23263a;
+      color: #aaa;
+    }
+    .info-pill span { color: #4a90d9; font-weight: bold; }
+
+    .signal-box {
+      background: #23263a;
+      border-left: 3px solid #4a90d9;
+      padding: 8px 12px;
+      border-radius: 0 6px 6px 0;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #ccc;
+    }
+    .signal-box strong { color: #4a90d9; }
+
+    .source-link {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #4a90d9;
+      text-decoration: none;
+      border: 1px solid #2a4a6a;
+      padding: 3px 10px;
+      border-radius: 4px;
+    }
+    .source-link:hover { background: #1a3a5a; }
+
+    .buildable-tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+      background: #1a2a1a;
+      color: #66bb6a;
+      border: 1px solid #2a4a2a;
+    }
+
+    /* Priority table */
+    .priority-section { margin-top: 40px; }
+    .priority-section h2 { color: #fff; font-size: 20px; margin-bottom: 14px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    th {
+      background: #1a1d26;
+      color: #888;
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      border-bottom: 2px solid #2a2d3a;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e2130;
+      color: #ccc;
+      vertical-align: top;
+    }
+    tr:hover td { background: #1a1d26; }
+    .rank-gold   { color: #ffd700; font-weight: bold; }
+    .rank-silver { color: #c0c0c0; font-weight: bold; }
+    .rank-bronze { color: #cd7f32; font-weight: bold; }
+    .effort-low    { color: #4caf50; }
+    .effort-medium { color: #ffc107; }
+    .effort-high   { color: #ef5350; }
+
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #2a2d3a;
+      font-size: 12px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📡 Trading Signal Sources</h1>
+  <p class="subtitle">Smart money monitoring guide — Nathaniel's Trading System &nbsp;|&nbsp; Generated May 2026</p>
+
+  <!-- ═══ TIER 1 ═══ -->
+  <div class="tier-label tier-1">🏆 Tier 1 — Most Actionable &amp; Free</div>
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">1</div>
+        <div>
+          <div class="card-title">SEC Form 4 — Corporate Insider Trades</div>
+          <div class="card-subtitle">Executives &amp; directors buying/selling their own stock</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>When CEOs, CFOs, and board members buy or sell their own company's stock, they must file with the SEC within <strong>2 business days</strong>. A CEO buying $1M of their own stock is one of the strongest confidence signals available anywhere.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> CEO/CFO BUYING (not selling — executives sell for many reasons: taxes, diversification, home purchase). Buying means they believe the price is going up.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>2 days</span></div>
+        <div class="info-pill">Frequency: <span>Daily</span></div>
+        <div class="info-pill">Coverage: <span>All public companies</span></div>
+      </div>
+      <div class="buildable-tag">✅ Buildable — EDGAR free API</div><br>
+      <a class="source-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4" target="_blank">SEC EDGAR Form 4 →</a>
+      <a class="source-link" href="https://openinsider.com" target="_blank">OpenInsider.com →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">2</div>
+        <div>
+          <div class="card-title">13F Filings — Hedge Fund Holdings</div>
+          <div class="card-subtitle">What Buffett, Ackman, Burry are buying quarterly</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>Every fund managing over $100M must disclose all equity holdings to the SEC every quarter. You can see exactly what the world's best investors are accumulating or exiting — 45 days after quarter end.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> New positions opened or existing positions significantly increased by top performers (Berkshire, Pershing Square, Scion Asset Management, Citadel).
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>45 days</span></div>
+        <div class="info-pill">Frequency: <span>Quarterly</span></div>
+        <div class="info-pill">Stars: <span>Buffett, Ackman, Burry, Dalio</span></div>
+      </div>
+      <div class="buildable-tag">✅ Buildable — EDGAR free API</div><br>
+      <a class="source-link" href="https://13f.info" target="_blank">13f.info →</a>
+      <a class="source-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F" target="_blank">SEC EDGAR 13F →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">3</div>
+        <div>
+          <div class="card-title">Congressional Trades — House (STOCK Act)</div>
+          <div class="card-subtitle">Currently tracked: Pelosi, Cleo Fields, Ro Khanna</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>Already implemented in your system. Members of Congress must disclose trades within 45 days. Insiders with committee access to classified briefings — defense, tech, energy, healthcare — often trade ahead of major policy announcements.</p>
+      <div class="signal-box">
+        <strong>Currently tracking:</strong> Nancy Pelosi (tech options), Cleo Fields (Mag 7 buyer), Ro Khanna (semiconductors &amp; broad tech)
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Status: <span>LIVE ✅</span></div>
+        <div class="info-pill">Runs: <span>Hourly, market hours</span></div>
+      </div>
+      <a class="source-link" href="https://www.capitoltrades.com" target="_blank">Capitol Trades →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">4</div>
+        <div>
+          <div class="card-title">Unusual Options Flow</div>
+          <div class="card-subtitle">Large institutional bets before major catalysts</div>
+        </div>
+        <span class="badge badge-freemium">FREEMIUM</span>
+      </div>
+      <p>When someone places an unusually large options bet — especially out-of-the-money calls or puts expiring soon — it often signals institutional knowledge of a coming catalyst: earnings beat, merger announcement, FDA approval, government contract.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> Large OTM call sweeps on small/mid-cap stocks with low implied volatility and no obvious news catalyst.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>Real-time</span></div>
+        <div class="info-pill">Frequency: <span>Intraday</span></div>
+        <div class="info-pill">Risk: <span>Medium — requires filtering</span></div>
+      </div>
+      <div class="buildable-tag">✅ Buildable via API</div><br>
+      <a class="source-link" href="https://unusualwhales.com" target="_blank">UnusualWhales.com →</a>
+      <a class="source-link" href="https://flowalgos.com" target="_blank">FlowAlgos.com →</a>
+    </div>
+
+  </div>
+
+  <!-- ═══ TIER 2 ═══ -->
+  <div class="tier-label tier-2">🥈 Tier 2 — Strong Signals, Slightly More Complex</div>
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">5</div>
+        <div>
+          <div class="card-title">USASpending.gov — Government Contract Awards</div>
+          <div class="card-subtitle">Perfect for your defense &amp; tech holdings</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>The US government awards billions in contracts daily. When a defense, tech, or energy company wins a major contract, the stock often moves before the news hits mainstream media. Directly relevant to your existing holdings.</p>
+      <div class="signal-box">
+        <strong>Your holdings to monitor:</strong> LMT, BWXT, RKLB, PLTR, IONQ — all heavily dependent on government contracts. A surprise DoD or NASA award = immediate catalyst.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>Same day</span></div>
+        <div class="info-pill">API: <span>Free, no key required</span></div>
+        <div class="info-pill">Coverage: <span>All federal agencies</span></div>
+      </div>
+      <div class="buildable-tag">✅ Easiest to build — simple REST API</div><br>
+      <a class="source-link" href="https://api.usaspending.gov" target="_blank">USASpending API →</a>
+      <a class="source-link" href="https://www.usaspending.gov/search" target="_blank">Contract Search →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">6</div>
+        <div>
+          <div class="card-title">13D/13G Filings — Activist Investors Taking Stakes</div>
+          <div class="card-subtitle">When a hedge fund acquires 5%+ of a company</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>When an activist hedge fund acquires more than 5% of a company, they file a 13D (activist, intends to influence management) or 13G (passive). Activist involvement often leads to buyouts, restructuring, spin-offs, or leadership changes — all bullish catalysts.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> 13D filing (activist intent) in a company you hold or are watching. Carl Icahn, Elliott Management, and ValueAct filings historically produce 15-40% gains.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>10 days</span></div>
+        <div class="info-pill">Frequency: <span>As filed</span></div>
+        <div class="info-pill">Coverage: <span>All public companies</span></div>
+      </div>
+      <div class="buildable-tag">✅ Buildable — EDGAR API</div><br>
+      <a class="source-link" href="https://efts.sec.gov/LATEST/search-index?q=%2213D%22&dateRange=custom&startdt=2026-01-01&forms=SC 13D" target="_blank">SEC EDGAR 13D →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">7</div>
+        <div>
+          <div class="card-title">Senate Financial Disclosures</div>
+          <div class="card-subtitle">Separate from House — different filing system</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>US Senators file on a separate electronic system from House members. Sometimes less scrutinized, with senators on key committees (Armed Services, Intelligence, Finance, Banking) trading ahead of major policy moves.</p>
+      <div class="signal-box">
+        <strong>Notable Senate traders:</strong> Mark Warner (D-VA, tech-focused, Intel committee), Tommy Tuberville (R-AL, aggressive trader), Mike Rounds (R-SD, defense &amp; energy focus).
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>45 days</span></div>
+        <div class="info-pill">Source: <span>Senate eFD system</span></div>
+      </div>
+      <div class="buildable-tag">✅ Low effort — add to existing copy trader</div><br>
+      <a class="source-link" href="https://efts.senate.gov/public/index.cfm/financial-disclosures" target="_blank">Senate eFD System →</a>
+      <a class="source-link" href="https://www.capitoltrades.com/politicians?chamber=senate" target="_blank">Capitol Trades (Senate) →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">8</div>
+        <div>
+          <div class="card-title">ETF Flow Monitoring</div>
+          <div class="card-subtitle">When institutional money pours into sector ETFs</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>Large inflows into sector ETFs (like XLE, SOXX, XLK, XLV) signal institutional rotation into that sector before it shows up in individual stock prices. ETF creation/redemption data reveals where the big money is moving.</p>
+      <div class="signal-box">
+        <strong>Relevant to your holdings:</strong> SOXX (semis), XLE (energy — XOM, CVX), XLK (tech — MSFT, NVDA), VNQ (REITs). Unusual inflows = institutional accumulation.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>1 day</span></div>
+        <div class="info-pill">Source: <span>ETF.com, VettaFi</span></div>
+      </div>
+      <a class="source-link" href="https://etf.com/etfanalytics/etf-fund-flows-tool" target="_blank">ETF Fund Flows →</a>
+    </div>
+
+  </div>
+
+  <!-- ═══ TIER 3 ═══ -->
+  <div class="tier-label tier-3">🥉 Tier 3 — Powerful But Harder to Automate</div>
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">9</div>
+        <div>
+          <div class="card-title">Dark Pool Prints</div>
+          <div class="card-subtitle">Large block trades done off-exchange</div>
+        </div>
+        <span class="badge badge-freemium">FREEMIUM</span>
+      </div>
+      <p>Institutional investors often execute large trades in "dark pools" — private exchanges that don't show up in public order books. Sudden spikes in dark pool volume on a stock with no news often precede major moves by 1-3 days.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> Dark pool print >$5M on a mid-cap stock with no recent news. Institutional accumulation before an announcement.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>End of day</span></div>
+        <div class="info-pill">Difficulty: <span>Medium — requires filtering</span></div>
+      </div>
+      <a class="source-link" href="https://unusualwhales.com/dark-pool" target="_blank">UnusualWhales Dark Pool →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">10</div>
+        <div>
+          <div class="card-title">Short Interest Changes</div>
+          <div class="card-subtitle">When smart money bets against or covers a stock</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>High and rising short interest signals sophisticated investors expect a decline. When short interest drops sharply, short sellers are covering — often because something bullish is coming. Bi-weekly FINRA data, with real-time estimates available.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> Short interest dropping 20%+ in 2 weeks with no news = shorts covering ahead of a catalyst. Rising SI on your holdings = warning flag.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>2 weeks (FINRA)</span></div>
+        <div class="info-pill">Source: <span>FINRA, Ortex</span></div>
+      </div>
+      <a class="source-link" href="https://finra-markets.morningstar.com/MarketData/EquityOptions/default.jsp" target="_blank">FINRA Short Data →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">11</div>
+        <div>
+          <div class="card-title">FDA Approval Calendar</div>
+          <div class="card-subtitle">Binary events in biotech/pharma</div>
+        </div>
+        <span class="badge badge-free">FREE</span>
+      </div>
+      <p>FDA PDUFA dates (drug approval deadlines) are known months in advance. Biotech stocks can double or halve on these decisions. Knowing the calendar lets you position ahead of time or avoid being caught on the wrong side.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> Biotech with high short interest approaching a PDUFA date = potential short squeeze if approved. Sell before PDUFA if holding a biotech long.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Lag: <span>None — known in advance</span></div>
+        <div class="info-pill">Frequency: <span>Monthly calendar</span></div>
+      </div>
+      <a class="source-link" href="https://www.biopharmcatalyst.com/calendars/fda-calendar" target="_blank">BioPharma Catalyst →</a>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-number">12</div>
+        <div>
+          <div class="card-title">Earnings Whisper &amp; Analyst Revisions</div>
+          <div class="card-subtitle">When Wall Street raises estimates before announcements</div>
+        </div>
+        <span class="badge badge-freemium">FREEMIUM</span>
+      </div>
+      <p>When multiple analysts raise price targets or EPS estimates in the weeks before earnings, it signals strong institutional conviction. Stocks with accelerating estimate revisions tend to outperform. The "earnings whisper" number (unofficial expectation) also matters — beating it matters more than the official consensus.</p>
+      <div class="signal-box">
+        <strong>Best signal:</strong> 3+ analyst upgrades in 2 weeks on a stock you own = institutional accumulation ahead of a beat.
+      </div>
+      <div class="info-row">
+        <div class="info-pill">Source: <span>Seeking Alpha, Estimize</span></div>
+        <div class="info-pill">Frequency: <span>Daily</span></div>
+      </div>
+      <a class="source-link" href="https://earningswhispers.com" target="_blank">EarningsWhispers.com →</a>
+    </div>
+
+  </div>
+
+  <!-- ═══ BUILD PRIORITY TABLE ═══ -->
+  <div class="priority-section">
+    <h2>🔨 Build Priority — What to Add to Your System Next</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Signal</th>
+          <th>Why It Fits Your Portfolio</th>
+          <th>Build Effort</th>
+          <th>Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="rank-gold">🥇 1st</td>
+          <td><strong>USASpending.gov Contract Awards</strong></td>
+          <td>Direct catalyst for LMT, BWXT, RKLB, PLTR, IONQ — all government-dependent</td>
+          <td class="effort-low">Low</td>
+          <td>Free</td>
+        </tr>
+        <tr>
+          <td class="rank-gold">🥇 1st</td>
+          <td><strong>SEC Form 4 Insider Trades</strong></td>
+          <td>Monitor your 29 positions for CEO/insider buying — strongest available signal</td>
+          <td class="effort-medium">Medium</td>
+          <td>Free</td>
+        </tr>
+        <tr>
+          <td class="rank-silver">🥈 2nd</td>
+          <td><strong>13F Hedge Fund Tracker</strong></td>
+          <td>See what Buffett, Ackman, Burry are accumulating — quarterly conviction plays</td>
+          <td class="effort-medium">Medium</td>
+          <td>Free</td>
+        </tr>
+        <tr>
+          <td class="rank-silver">🥈 2nd</td>
+          <td><strong>Unusual Options Flow</strong></td>
+          <td>Early warning on big moves in your holdings before news breaks</td>
+          <td class="effort-medium">Medium</td>
+          <td>Freemium</td>
+        </tr>
+        <tr>
+          <td class="rank-bronze">🥉 3rd</td>
+          <td><strong>Senate Disclosures</strong></td>
+          <td>Low effort add-on to existing copy trader — expand political signal coverage</td>
+          <td class="effort-low">Low</td>
+          <td>Free</td>
+        </tr>
+        <tr>
+          <td class="rank-bronze">🥉 3rd</td>
+          <td><strong>ETF Flow Monitoring</strong></td>
+          <td>Sector rotation signals for SOXX, XLE, VNQ you already hold</td>
+          <td class="effort-low">Low</td>
+          <td>Free</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Generated by Nathaniel's Trading System &nbsp;|&nbsp; May 2026 &nbsp;|&nbsp;
+    All sources listed provide publicly available data. This is for informational purposes only — not financial advice.
+  </div>
+
+</body>
+</html>

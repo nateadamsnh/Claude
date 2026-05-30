@@ -1,0 +1,26 @@
+# Logs
+logs/*.log
+logs/wheel_scan_latest.json
+
+# Credentials and secrets — NEVER commit these
+config/alpaca_credentials.json
+config/email_config.json
+config/telegram_config.json
+config/webhook_config.json
+
+# Runtime state files (change every run)
+strategies/strategy_state.json
+strategies/regime_state.json
+strategies/qbts_wheel_state.json
+politician-copy-trader/state.json
+signals/states/
+config/wheel_state.json
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Claude internal
+.claude/settings.local.json

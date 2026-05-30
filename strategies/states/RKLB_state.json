@@ -1,0 +1,14 @@
+{
+  "symbol": "RKLB",
+  "fill_price": 146.2,
+  "highest_price": 146.2,
+  "stop_price": 131.58,
+  "stop_order_id": "a60edf77-71c5-4b53-8109-ed353de5de1c",
+  "whole_qty": 13,
+  "initial_qty": 13.0,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

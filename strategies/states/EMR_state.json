@@ -1,0 +1,14 @@
+{
+  "symbol": "EMR",
+  "fill_price": 134.87,
+  "highest_price": 145.51,
+  "stop_order_id": "a9884514-5c79-42be-b57b-ecb5a1943ceb",
+  "stop_price": 121.38,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 3,
+  "initial_qty": 3.70727367
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "BSX",
+  "fill_price": 57.01,
+  "highest_price": 58.26,
+  "stop_order_id": "5b38946d-d596-4d9e-b73f-66f9259d0c80",
+  "stop_price": 51.31,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": true,
+  "whole_qty": 8,
+  "initial_qty": 8.770391159
+}

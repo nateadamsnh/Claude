@@ -1,0 +1,14 @@
+{
+  "symbol": "BWXT",
+  "fill_price": 199.58,
+  "highest_price": 199.58,
+  "stop_price": 179.62,
+  "stop_order_id": "22ebdd57-2eac-4029-b0d0-810a3af48b0e",
+  "whole_qty": 10,
+  "initial_qty": 10.0,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

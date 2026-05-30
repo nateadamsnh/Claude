@@ -1,0 +1,51 @@
+{
+  "politicians": [
+    {
+      "name": "Nancy Pelosi",
+      "id": "P000197",
+      "party": "Democrat",
+      "state": "California",
+      "notes": "44 trades, $97.81M volume. Top pick — NVDA, AAPL, GOOGL, AMZN focus. $3M+ documented gains, 133% on Broadcom options."
+    },
+    {
+      "name": "Cleo Fields",
+      "id": "F000110",
+      "party": "Democrat",
+      "state": "Louisiana",
+      "notes": "222 trades, $22.74M volume. Pure Magnificent 7 focus — NVDA (44 trades), GOOGL (26), AAPL (20), MSFT (16). IT sector 61% of all trades. Bought ORCL before Trump TikTok exec order."
+    },
+    {
+      "name": "Ro Khanna",
+      "id": "K000389",
+      "party": "Democrat",
+      "state": "California",
+      "notes": "12,548 trades, $211.18M volume. Very active — JPM, AMZN, Meta, Micron, GOOGL. High signal volume, watch for noise."
+    }
+  ],
+  "trading": {
+    "trade_amount_usd": 500,
+    "scale_by_size": false,
+    "size_tiers": {
+      "1K-15K": 300,
+      "15K-50K": 600,
+      "50K-100K": 1000,
+      "100K-250K": 1500,
+      "250K-500K": 2500,
+      "500K-1M": 4000,
+      "1M-5M": 6000,
+      "5M+": 10000
+    },
+    "skip_keywords": [
+      "treasury", "t-bill", "t bill", "xsp", "mini spx",
+      "cboe", "index", "bond", "note", "bill", "mutual fund",
+      "money market", "etf", "trust"
+    ]
+  },
+  "notifications": {
+    "enabled": true,
+    "notify_new_trades": true,
+    "notify_gain": true,
+    "gain_milestones_pct": [5, 10, 25, 50, 100],
+    "email_notifications": true
+  }
+}

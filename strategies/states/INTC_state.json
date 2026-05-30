@@ -1,0 +1,14 @@
+{
+  "symbol": "INTC",
+  "fill_price": 118.1,
+  "highest_price": 125.54,
+  "stop_order_id": "c2c5533f-53e4-4411-8878-1f2ccb6dd7ed",
+  "stop_price": 106.29,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 4,
+  "initial_qty": 4.233700254
+}

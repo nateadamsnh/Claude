@@ -1,0 +1,14 @@
+{
+  "symbol": "PM",
+  "fill_price": 188.1,
+  "highest_price": 190.37,
+  "stop_order_id": "39721024-c5ac-4396-9fa2-f6e327e33ce1",
+  "stop_price": 169.29,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.658160552
+}

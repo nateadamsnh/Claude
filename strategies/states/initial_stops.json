@@ -1,0 +1,100 @@
+[
+  {
+    "symbol": "ACI",
+    "qty": 30,
+    "entry": 16.35,
+    "stop": 14.72,
+    "order_id": "4caeedeb-a3ca-4bef-8812-afb8f9e36fb9"
+  },
+  {
+    "symbol": "BAC",
+    "qty": 9,
+    "entry": 51.26,
+    "stop": 46.13,
+    "order_id": "358aad1f-b8f7-4496-afaf-80a0665ca947"
+  },
+  {
+    "symbol": "BRK.B",
+    "qty": 2,
+    "entry": 479.690976,
+    "stop": 431.72,
+    "order_id": "c7baf61f-5451-40de-84ee-e0743d644e8a"
+  },
+  {
+    "symbol": "BSX",
+    "qty": 8,
+    "entry": 57.01,
+    "stop": 51.31,
+    "order_id": "5b38946d-d596-4d9e-b73f-66f9259d0c80"
+  },
+  {
+    "symbol": "CARR",
+    "qty": 7,
+    "entry": 62.58,
+    "stop": 56.32,
+    "order_id": "f2f11f88-855e-4958-b254-d779225d527d"
+  },
+  {
+    "symbol": "EMR",
+    "qty": 3,
+    "entry": 134.87,
+    "stop": 121.38,
+    "order_id": "a9884514-5c79-42be-b57b-ecb5a1943ceb"
+  },
+  {
+    "symbol": "IBM",
+    "qty": 2,
+    "entry": 249.58,
+    "stop": 224.62,
+    "order_id": "1b4bbeba-dc75-4d81-a1c9-d55b6ec10712"
+  },
+  {
+    "symbol": "INTC",
+    "qty": 4,
+    "entry": 118.1,
+    "stop": 106.29,
+    "order_id": "c2c5533f-53e4-4411-8878-1f2ccb6dd7ed"
+  },
+  {
+    "symbol": "LOW",
+    "qty": 2,
+    "entry": 218.01,
+    "stop": 196.21,
+    "order_id": "b16569ba-5f2a-4262-858d-6728f2fa10cb"
+  },
+  {
+    "symbol": "MA",
+    "qty": 1,
+    "entry": 498.938,
+    "stop": 449.04,
+    "order_id": "14bd3c70-a751-45bd-a011-7ef1eecf831d"
+  },
+  {
+    "symbol": "ORCL",
+    "qty": 2,
+    "entry": 189.52,
+    "stop": 170.57,
+    "order_id": "f6dd04a6-575a-4be9-a7a8-a35bff8109ab"
+  },
+  {
+    "symbol": "PM",
+    "qty": 2,
+    "entry": 188.1,
+    "stop": 169.29,
+    "order_id": "39721024-c5ac-4396-9fa2-f6e327e33ce1"
+  },
+  {
+    "symbol": "SYK",
+    "qty": 1,
+    "entry": 314.518,
+    "stop": 283.07,
+    "order_id": "9b208dc8-1b07-4b81-a0ed-01908ab9ad90"
+  },
+  {
+    "symbol": "V",
+    "qty": 1,
+    "entry": 331.164,
+    "stop": 298.05,
+    "order_id": "85b8052c-6ff5-4409-a67f-91983e8a2d4e"
+  }
+]

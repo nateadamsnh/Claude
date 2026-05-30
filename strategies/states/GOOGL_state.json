@@ -1,0 +1,14 @@
+{
+  "symbol": "GOOGL",
+  "fill_price": 388.44,
+  "highest_price": 388.44,
+  "stop_price": 349.6,
+  "stop_order_id": "3a3e9402-0358-4532-8186-562634f95d94",
+  "whole_qty": 5,
+  "initial_qty": 5.0,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false
+}

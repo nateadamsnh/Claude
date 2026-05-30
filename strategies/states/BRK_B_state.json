@@ -1,0 +1,14 @@
+{
+  "symbol": "BRK.B",
+  "fill_price": 479.690976,
+  "highest_price": 487.135,
+  "stop_order_id": "c7baf61f-5451-40de-84ee-e0743d644e8a",
+  "stop_price": 431.72,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.084675446
+}
