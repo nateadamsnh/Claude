@@ -85,8 +85,13 @@ def load_state(filename: str) -> dict:
 
 
 def save_state(filename: str, state: dict):
-    with open(STATES_DIR / filename, "w") as f:
+    """Atomic write: write to temp file then rename to avoid corruption on kill."""
+    import os
+    target = STATES_DIR / filename
+    tmp    = target.with_suffix(".tmp")
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
+    os.replace(tmp, target)
 
 
 def send_signal_email(subject: str, body_text: str, body_html: str):

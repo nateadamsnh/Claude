@@ -100,8 +100,10 @@ def parse_13f_holdings(cik: str, accession: str) -> list:
         root = ET.fromstring(rx.content)
         # Handle namespace
         ns_match = re.search(r'\{([^}]+)\}', root.tag)
-        ns = {"ns": ns_match.group(1)} if ns_match else {}
-        prefix = f"{{{'ns' if ns else ''}}}" if ns else ""
+        # Build Clark-notation prefix: "{http://actual.namespace.uri/}"
+        # ns dict is for ElementTree find() calls using "ns:tag" shorthand (not used here)
+        ns_uri = ns_match.group(1) if ns_match else ""
+        prefix = f"{{{ns_uri}}}" if ns_uri else ""
 
         for info in root.iter():
             if "infoTable" not in info.tag:

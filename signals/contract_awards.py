@@ -71,7 +71,9 @@ def run():
     log.info("=" * 65)
 
     state     = load_state("contract_awards.json")
-    seen_ids  = set(state.get("seen_award_ids", []))
+    # Use a list (not set) to preserve insertion order for deterministic [-500:] trim
+    seen_ids_list = state.get("seen_award_ids", [])
+    seen_ids      = set(seen_ids_list)  # set for O(1) lookup; list preserved for ordered save
 
     # Search past 2 days to catch any delays in reporting
     end_date   = date.today().isoformat()
@@ -92,12 +94,17 @@ def run():
                     continue
 
                 seen_ids.add(award_id)
+                seen_ids_list.append(award_id)
+                # "Start Date" is a USASpending display alias; fall back to the canonical field
+                award_date = (a.get("Start Date")
+                              or a.get("period_of_performance_start_date")
+                              or a.get("Award Date", ""))
                 new_awards.append({
                     "symbol":    symbol,
                     "award_id":  award_id,
                     "recipient": a.get("Recipient Name", term),
                     "amount":    amount,
-                    "date":      a.get("Start Date", ""),
+                    "date":      award_date,
                     "agency":    a.get("Awarding Agency", ""),
                     "desc":      (a.get("Description") or "")[:120],
                 })
@@ -106,8 +113,8 @@ def run():
                     f"{a.get('Awarding Agency') or '?'} | {(a.get('Description') or '')[:60]}"
                 )
 
-    # Save state
-    state["seen_award_ids"] = list(seen_ids)[-500:]  # Keep last 500
+    # Save state — keep the 500 most recently added IDs (list preserves insertion order)
+    state["seen_award_ids"] = seen_ids_list[-500:]
     state["last_run"] = end_date
     save_state("contract_awards.json", state)
 

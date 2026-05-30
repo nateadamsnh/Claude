@@ -239,8 +239,10 @@ def check_symbol(symbol):
         save_state(symbol, state)
     else:
         state["stop_order_id"] = stop_orders[0]["id"]
-        state["stop_price"]    = float(stop_orders[0]["stop_price"])
-        current_stop           = state["stop_price"]
+        raw_stop = stop_orders[0].get("stop_price")
+        if raw_stop is not None:
+            state["stop_price"] = float(raw_stop)
+        current_stop = state["stop_price"]
 
     # Update highest price
     if current_price > highest_price:
@@ -274,8 +276,9 @@ def check_symbol(symbol):
         if r.status_code == 200 and r.json().get("status") == "filled":
             new_total_whole = floor(held_qty)
             log.info(f"  {symbol:6s} | LADDER FILLED — upgrading stop to {new_total_whole} shares")
-            update_stop(symbol, state, current_stop)
+            # Update whole_qty BEFORE calling update_stop so the new stop covers all shares
             state["whole_qty"]     = new_total_whole
+            update_stop(symbol, state, current_stop)
             state["ladder_filled"] = True
 
     save_state(symbol, state)

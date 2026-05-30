@@ -97,16 +97,25 @@ def parse_form4_detail(filing_url: str) -> dict:
         result["insider"] = insider_match.group(1).strip() if insider_match else ""
         result["title"]   = title_match.group(1).strip() if title_match else ""
 
-        # Look for non-derivative transactions (direct stock purchases/sales)
-        tx_codes   = re.findall(r'<transactionCode>(.*?)</transactionCode>', xml_text)
-        shares_list = re.findall(r'<transactionShares>.*?<value>([\d.]+)</value>', xml_text, re.DOTALL)
-        price_list  = re.findall(r'<transactionPricePerShare>.*?<value>([\d.]+)</value>', xml_text, re.DOTALL)
-
-        purchases = [(c, s, p) for c, s, p in zip(
-            tx_codes,
-            shares_list[:len(tx_codes)],
-            price_list[:len(tx_codes)]
-        ) if c == "P"]  # P = purchase in open market
+        # Parse non-derivative transactions as atomic blocks to avoid zip() misalignment.
+        # Derivative transactions have <transactionCode> but no <transactionPricePerShare>,
+        # so zipping flat lists across the whole XML can pair a purchase code with the
+        # wrong share count or price from a different transaction.
+        purchases = []
+        non_deriv_blocks = re.findall(
+            r'<nonDerivativeTransaction>(.*?)</nonDerivativeTransaction>',
+            xml_text, re.DOTALL
+        )
+        for block in non_deriv_blocks:
+            code_m   = re.search(r'<transactionCode>(.*?)</transactionCode>', block)
+            shares_m = re.search(r'<transactionShares>.*?<value>([\d.]+)</value>', block, re.DOTALL)
+            price_m  = re.search(r'<transactionPricePerShare>.*?<value>([\d.]+)</value>', block, re.DOTALL)
+            if code_m and code_m.group(1).strip() == "P" and shares_m and price_m:
+                purchases.append((
+                    code_m.group(1).strip(),
+                    shares_m.group(1),
+                    price_m.group(1),
+                ))
 
         if purchases:
             code, shares_str, price_str = purchases[0]

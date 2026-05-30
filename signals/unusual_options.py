@@ -127,8 +127,9 @@ def get_options_snapshot(symbol: str) -> dict:
                 params={"symbols": contracts[0]["symbol"]},
                 timeout=10,
             ).json()
-            greeks = snap.get("snapshots", {}).get(contracts[0]["symbol"], {}).get("greeks", {})
-            iv = greeks.get("iv", 0) or 0
+            # Alpaca returns impliedVolatility at the snapshot root level,
+            # NOT nested under greeks (greeks contains delta/gamma/theta/vega/rho only)
+            iv = snap.get("snapshots", {}).get(contracts[0]["symbol"], {}).get("impliedVolatility") or 0
             if iv > 0:
                 result[key] = float(iv)
                 result["found"] = True

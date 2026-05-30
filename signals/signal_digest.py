@@ -37,7 +37,7 @@ def get_portfolio_snapshot() -> dict:
     try:
         acct = requests.get(f"{BASE_URL}/account", headers=HEADERS, timeout=10).json()
         positions = requests.get(f"{BASE_URL}/positions", headers=HEADERS, timeout=10).json()
-        stocks = [p for p in positions if not p["symbol"].startswith("QBTS2")]
+        stocks = [p for p in positions if p.get("asset_class", "us_equity") == "us_equity"]
         orders = requests.get(f"{BASE_URL}/orders", headers=HEADERS,
                               params={"status": "open", "limit": 200}, timeout=10).json()
         stops = {o["symbol"] for o in orders if o.get("type") == "stop" and o.get("side") == "sell"}

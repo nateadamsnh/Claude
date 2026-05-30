@@ -166,8 +166,13 @@ def run():
     log.info("=" * 65)
 
     # Check market
-    clock = requests.get(f"{BASE_URL}/clock", headers=HEADERS, timeout=10).json()
-    market_open = clock.get("is_open", False)
+    try:
+        clock_r = requests.get(f"{BASE_URL}/clock", headers=HEADERS, timeout=10)
+        clock_r.raise_for_status()
+        market_open = clock_r.json().get("is_open", False)
+    except Exception as e:
+        log.error(f"Failed to check market clock: {e} — defaulting to closed")
+        market_open = False
 
     state    = load_state("senate_disclosures.json")
     seen_keys = set(state.get("seen_keys", []))
