@@ -230,11 +230,11 @@ def find_call_contract(cost_basis: float) -> dict | None:
 # Order placement
 # ══════════════════════════════════════════════════════════════════════════════
 
-def sell_to_open(contract: dict, label: str) -> dict:
-    """Sell NUM_CONTRACTS at mid-price limit (credit trade)."""
+def sell_to_open(contract: dict, label: str, qty: int = NUM_CONTRACTS) -> dict:
+    """Sell `qty` contracts at mid-price limit (credit trade)."""
     payload = {
         "symbol":        contract["symbol"],
-        "qty":           str(NUM_CONTRACTS),
+        "qty":           str(qty),
         "side":          "sell",
         "type":          "limit",
         "limit_price":   str(contract["mid"]),
@@ -242,10 +242,10 @@ def sell_to_open(contract: dict, label: str) -> dict:
     }
     r = requests.post(f"{BASE_URL}/orders", headers=HEADERS, json=payload, timeout=10)
     order = r.json()
-    total_credit = contract["mid"] * 100 * NUM_CONTRACTS
+    total_credit = contract["mid"] * 100 * qty
     if r.status_code in (200, 201):
         log.info(
-            f"  [{label}] {contract['symbol']} x{NUM_CONTRACTS} | "
+            f"  [{label}] {contract['symbol']} x{qty} | "
             f"strike ${contract['strike']:.2f} exp {contract['exp']} "
             f"({(date.fromisoformat(contract['exp'])-date.today()).days} DTE) | "
             f"${contract['mid']:.2f}/sh (${total_credit:.2f} total credit) | "
@@ -316,11 +316,21 @@ def run_csp(state: dict, positions: dict, account: dict):
         target_strike = current_price * (1 - PUT_OTM_PCT)
         required_cash = target_strike * 100 * contracts_to_sell
         if cash < required_cash:
-            log.warning(
-                f"  Insufficient cash ${cash:,.0f} for {contracts_to_sell} CSPs "
-                f"(need ${required_cash:,.0f}). Skipping."
-            )
-            return
+            # Scale down to however many contracts cash actually supports (min 1)
+            affordable = max(1, int(cash // (target_strike * 100)))
+            if affordable < contracts_to_sell:
+                log.info(
+                    f"  Cash ${cash:,.0f} insufficient for {contracts_to_sell} CSPs "
+                    f"(need ${required_cash:,.0f}). Scaling down to {affordable} contract(s)."
+                )
+                contracts_to_sell = affordable
+            # Final check: if we can't even afford 1 contract, skip
+            if cash < target_strike * 100:
+                log.warning(
+                    f"  Insufficient cash ${cash:,.0f} for even 1 CSP "
+                    f"(need ${target_strike * 100:,.0f}). Skipping."
+                )
+                return
 
         contract = find_put_contract(current_price)
         if not contract:
@@ -331,7 +341,7 @@ def run_csp(state: dict, positions: dict, account: dict):
             f"  Selling {contracts_to_sell} CSPs: strike ${contract['strike']:.2f}, "
             f"exp {contract['exp']}, mid ${contract['mid']:.2f}"
         )
-        order = sell_to_open(contract, "CSP-STO")
+        order = sell_to_open(contract, "CSP-STO", qty=contracts_to_sell)
         if order.get("id"):
             state["active_contract"] = contract["symbol"]
             state["active_order_id"] = order["id"]
