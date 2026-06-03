@@ -61,40 +61,52 @@ TRAILING_TRIGGER = 0.10   # Begin trailing once price is up 10%
 TRAIL_BELOW_HIGH = 0.05   # Stop sits 5% below the running high
 LADDER_DROP_PCT  = 0.20   # Buy 2x original qty if price drops 20%
 
-# ── Managed symbols + entry data (from avg_entry_price at time of enrollment) ─
-MANAGED = {
-    "ACI":   {"entry": 16.35,       "initial_qty": 30.581039755,  "whole_qty": 30},
-    "BAC":   {"entry": 51.26,       "initial_qty": 9.754194303,   "whole_qty": 9},
-    "BRK.B": {"entry": 479.690976,  "initial_qty": 2.084675446,   "whole_qty": 2},
-    "BSX":   {"entry": 57.01,       "initial_qty": 8.770391159,   "whole_qty": 8},
-    "CARR":  {"entry": 62.58,       "initial_qty": 7.98977309,    "whole_qty": 7},
-    "EMR":   {"entry": 134.87,      "initial_qty": 3.70727367,    "whole_qty": 3},
-    "IBM":   {"entry": 249.58,      "initial_qty": 2.003365654,   "whole_qty": 2},
-    "INTC":  {"entry": 118.10,      "initial_qty": 4.233700254,   "whole_qty": 4},
-    "LOW":   {"entry": 218.01,      "initial_qty": 2.293472776,   "whole_qty": 2},
-    "MA":    {"entry": 498.938,     "initial_qty": 1.00212852,    "whole_qty": 1},
-    "ORCL":  {"entry": 189.52,      "initial_qty": 2.638243984,   "whole_qty": 2},
-    "PM":    {"entry": 188.10,      "initial_qty": 2.658160552,   "whole_qty": 2},
-    "SYK":   {"entry": 314.518,     "initial_qty": 1.589734132,   "whole_qty": 1},
-    "BWXT":  {"entry": 199.580,     "initial_qty": 10,            "whole_qty": 10},
-    "IAU":   {"entry": 83.208,      "initial_qty": 100,           "whole_qty": 100},
-    "URA":   {"entry": 48.00,       "initial_qty": 41,            "whole_qty": 41},
-    "V":     {"entry": 331.164,     "initial_qty": 1.509825947,   "whole_qty": 1},
-    "NVDA":  {"entry": 211.981,     "initial_qty": 9.0,           "whole_qty": 9},
-    "MSFT":  {"entry": 411.897,     "initial_qty": 4.0,           "whole_qty": 4},
-    "GOOGL": {"entry": 388.440,     "initial_qty": 5.0,           "whole_qty": 5},
-    "SOXX":  {"entry": 576.530,     "initial_qty": 3.0,           "whole_qty": 3},
-    "XOM":   {"entry": 146.837,     "initial_qty": 13.0,          "whole_qty": 13},
-    "XLE":   {"entry": 56.649,      "initial_qty": 34.0,          "whole_qty": 34},
-    "CVX":   {"entry": 182.015,     "initial_qty": 10.0,          "whole_qty": 10},
-    "IONQ":  {"entry": 62.271,      "initial_qty": 31.0,          "whole_qty": 31},
-    "RKLB":  {"entry": 146.200,     "initial_qty": 13.0,          "whole_qty": 13},
-    "LMT":   {"entry": 527.527,     "initial_qty": 3.0,           "whole_qty": 3},
-    "PLTR":  {"entry": 132.034,     "initial_qty": 14.0,          "whole_qty": 14},
-    "VNQ":   {"entry": 97.273,      "initial_qty": 20.0,          "whole_qty": 20},
-    "O":     {"entry": 62.310,      "initial_qty": 32.0,          "whole_qty": 32},
-    "BND":   {"entry": 73.289,      "initial_qty": 27.0,          "whole_qty": 27},
-}
+# ── Managed symbols — built dynamically from live Alpaca positions each run ────
+# Populated in run() by calling build_managed(). No manual updates needed when
+# the copy trader or momentum strategy opens new positions.
+MANAGED: dict = {}
+
+
+# ── Dynamic position discovery ────────────────────────────────────────────────
+def build_managed() -> dict:
+    """
+    Fetch all equity positions from Alpaca and build the MANAGED dict.
+    For symbols that already have a state file, preserve the recorded entry
+    price (avg_entry_price at time of first enrollment) rather than overwriting
+    with today's cost basis.
+    """
+    r = requests.get(f"{BASE_URL}/positions", headers=HEADERS, timeout=10)
+    if r.status_code != 200:
+        log.error(f"Failed to fetch positions: {r.status_code}")
+        return {}
+
+    managed = {}
+    for p in r.json():
+        if p.get("asset_class") != "us_equity":
+            continue
+        sym   = p["symbol"]
+        qty   = float(p["qty"])
+        whole = floor(qty)
+        if whole < 1:
+            continue  # Skip pure-fractional positions — can't place whole-share stop
+
+        # Use saved entry price if state file exists, else use Alpaca's avg_entry_price
+        sp = STATES_DIR / f"{sym.replace('.','_')}_state.json"
+        if sp.exists():
+            try:
+                saved_entry = json.load(open(sp)).get("fill_price")
+                entry = float(saved_entry) if saved_entry else float(p["avg_entry_price"])
+            except Exception:
+                entry = float(p["avg_entry_price"])
+        else:
+            entry = float(p["avg_entry_price"])
+
+        managed[sym] = {
+            "entry":       entry,
+            "initial_qty": qty,
+            "whole_qty":   whole,
+        }
+    return managed
 
 
 # ── State helpers ─────────────────────────────────────────────────────────────
@@ -286,9 +298,18 @@ def check_symbol(symbol):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def run():
+    global MANAGED
     log.info("=" * 65)
     log.info(f"Strategy Manager  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info("=" * 65)
+
+    # Discover all current equity positions dynamically — no manual list needed
+    MANAGED = build_managed()
+    if not MANAGED:
+        log.warning("  No managed positions found — exiting.")
+        return
+    log.info(f"  Managing {len(MANAGED)} positions: {', '.join(sorted(MANAGED))}")
+
     for symbol in MANAGED:
         try:
             check_symbol(symbol)
