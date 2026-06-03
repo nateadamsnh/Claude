@@ -1,14 +1,14 @@
 {
   "symbol": "PLTR",
   "fill_price": 132.034286,
-  "highest_price": 157.7,
-  "stop_price": 149.81,
-  "stop_order_id": "7706c818-6e24-423a-a5fb-a863e1f9c921",
+  "highest_price": 163.38,
+  "stop_price": 155.21,
+  "stop_order_id": "e70c4de1-478d-4e9e-8e08-87e107bcd261",
   "whole_qty": 14,
   "initial_qty": 14.0,
   "trailing_active": true,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }

@@ -1,0 +1,14 @@
+{
+  "symbol": "CEG",
+  "fill_price": 267.718,
+  "whole_qty": 1,
+  "initial_qty": 1,
+  "stop_price": 240.95,
+  "stop_order_id": "a8d01e6e-6b95-4242-b6a3-5e5ceb96ab55",
+  "highest_price": 267.44,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

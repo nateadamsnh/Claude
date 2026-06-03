@@ -10,5 +10,5 @@
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }

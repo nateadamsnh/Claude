@@ -1,14 +1,14 @@
 {
   "symbol": "MSFT",
   "fill_price": 411.8975,
-  "highest_price": 449.715,
-  "stop_price": 370.71,
-  "stop_order_id": "a19e71d8-88a9-4b54-81db-69daab963bfc",
+  "highest_price": 465.88,
+  "stop_price": 442.59,
+  "stop_order_id": "1820938e-073c-4723-af12-ef8b48b77a67",
   "whole_qty": 4,
   "initial_qty": 4.0,
-  "trailing_active": false,
+  "trailing_active": true,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }

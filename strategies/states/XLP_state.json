@@ -1,0 +1,14 @@
+{
+  "symbol": "XLP",
+  "fill_price": 82.443405,
+  "whole_qty": 6,
+  "initial_qty": 6,
+  "stop_price": 74.2,
+  "stop_order_id": "eb288e34-cc37-4ca4-ac72-c8d488e44881",
+  "highest_price": 82.55,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

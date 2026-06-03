@@ -1,0 +1,14 @@
+{
+  "symbol": "ACN",
+  "fill_price": 192.53,
+  "whole_qty": 2,
+  "initial_qty": 2,
+  "stop_price": 173.28,
+  "stop_order_id": "33776df3-7925-4c9b-93e4-8d61fbc4c2be",
+  "highest_price": 177.475,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

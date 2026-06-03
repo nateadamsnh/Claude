@@ -1,0 +1,14 @@
+{
+  "symbol": "RKT",
+  "fill_price": 14.24,
+  "whole_qty": 35,
+  "initial_qty": 35,
+  "stop_price": 12.82,
+  "stop_order_id": "70c0cf0b-e15c-482b-b967-95f79002f6e3",
+  "highest_price": 13.01,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

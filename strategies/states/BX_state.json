@@ -1,0 +1,14 @@
+{
+  "symbol": "BX",
+  "fill_price": 118.74,
+  "whole_qty": 4,
+  "initial_qty": 4,
+  "stop_price": 106.87,
+  "stop_order_id": "8273dd67-7f11-419a-beda-300146c18c51",
+  "highest_price": 110.3,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "XLU",
+  "fill_price": 43.66,
+  "whole_qty": 11,
+  "initial_qty": 11,
+  "stop_price": 39.29,
+  "stop_order_id": "fcce9754-0598-49ed-8880-b91d335f9a68",
+  "highest_price": 43.8,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

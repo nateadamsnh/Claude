@@ -1,0 +1,14 @@
+{
+  "symbol": "WFC",
+  "fill_price": 77.35,
+  "whole_qty": 6,
+  "initial_qty": 6,
+  "stop_price": 69.61,
+  "stop_order_id": "ad3ba21e-007c-4016-b72b-43aeb499ab89",
+  "highest_price": 78.69,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "IWF",
+  "fill_price": 128.23,
+  "whole_qty": 3,
+  "initial_qty": 3,
+  "stop_price": 115.41,
+  "stop_order_id": "ec29a739-a5a3-4edf-9137-30c3a0e2e705",
+  "highest_price": 126.63,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}

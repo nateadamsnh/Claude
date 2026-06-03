@@ -1,0 +1,14 @@
+{
+  "symbol": "HSY",
+  "fill_price": 189.8,
+  "whole_qty": 2,
+  "initial_qty": 2,
+  "stop_price": 170.82,
+  "stop_order_id": "fd861f94-2797-4123-bf73-49150365b7a2",
+  "highest_price": 183.2,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_filled": false,
+  "ladder_order_id": null,
+  "position_closed": false
+}
