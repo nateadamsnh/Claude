@@ -1,0 +1,14 @@
+{
+  "symbol": "TEAM",
+  "fill_price": 111.94,
+  "highest_price": 111.94,
+  "stop_order_id": "953b24c3-60ad-40fb-9cf2-3dc07e69bec7",
+  "stop_price": 100.75,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 4,
+  "initial_qty": 4.466678577
+}

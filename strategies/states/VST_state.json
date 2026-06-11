@@ -1,0 +1,14 @@
+{
+  "symbol": "VST",
+  "fill_price": 148.18,
+  "highest_price": 149.79,
+  "stop_order_id": "9b8d7709-55fe-46eb-bd8a-6c2d41710575",
+  "stop_price": 133.36,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 3,
+  "initial_qty": 3.374207045
+}
