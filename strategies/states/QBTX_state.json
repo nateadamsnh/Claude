@@ -1,0 +1,14 @@
+{
+  "symbol": "QBTX",
+  "fill_price": 15.67,
+  "highest_price": 19.36,
+  "stop_order_id": "3fbdd54a-6748-44be-a22a-3466392006a2",
+  "stop_price": 18.39,
+  "trailing_active": true,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 128,
+  "initial_qty": 128.0
+}

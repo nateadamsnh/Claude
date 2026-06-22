@@ -1,0 +1,14 @@
+{
+  "symbol": "SAIC",
+  "fill_price": 113.14,
+  "highest_price": 113.14,
+  "stop_order_id": "2717877b-930b-4a88-88e1-5d1640757915",
+  "stop_price": 101.83,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 4,
+  "initial_qty": 4.419215131
+}

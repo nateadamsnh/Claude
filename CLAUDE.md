@@ -28,6 +28,8 @@
 
 ## Politician Copy Trader Bot
 
+**Status: DISCONTINUED 2026-06-11** — removed at Nathaniel's request after flat performance (~-$30 net on ~$10K cycled through 24 trades). All 16 copy-trade positions liquidated at the 2026-06-12 open, "PoliticianCopyTrader" Task Scheduler task deleted. Code and state.json kept for records. The separate `signals/senate_disclosures.py` senator copy monitor was ALSO discontinued the same day (12 positions ~$3,893 liquidated, "SenateDisclosures" task deleted) — all congressional copy-trading is now shut down.
+
 **Location:** `C:\Users\Nathaniel\Documents\Trading\politician-copy-trader\`
 
 ### Files
@@ -161,23 +163,24 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 
 ---
 
-## Options / Wheel Strategy (QBTS)
+## Options / Wheel Strategy (MULTI-SYMBOL: MARA, SOFI, IONQ, DKNG)
 
-**Status: LIVE** — built 2026-05-26
-**Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\qbts_wheel_strategy.py`
-**State:** `C:\Users\Nathaniel\Documents\Trading\strategies\qbts_wheel_state.json`
-**Logs:** `C:\Users\Nathaniel\Documents\Trading\logs\qbts_wheel.log`
+**Status: LIVE — THE ONLY ACTIVE TRADING STRATEGY** (2026-06-22 Nathaniel liquidated everything and kept only the wheel; all other trading strategies disabled).
+**Script:** `strategies\options_wheel.py` — basket configured via `SYMBOLS = ["MARA","SOFI","IONQ","DKNG"]`. Each symbol runs an independent CSP→CC cycle with its own state file.
+**Task:** `\Alpaca\WheelStrategy` (every 30 min Mon-Fri 9:30 AM–6 PM)
+**State:** `strategies\{symbol}_wheel_state.json` (one per symbol)
+**Logs:** `logs\wheel.log` (shared)
 
-**Discontinued:** TSLA wheel strategy (removed)
+**History:** QBTS → MARA (2026-06-11), then opened to a 4-symbol basket (2026-06-22). QBTS final record +$371, 1 cycle, archived in `qbts_wheel_state.json`.
 
-### Current QBTS Wheel Status (as of 2026-05-30)
-- **Stage:** CSP — hunting for new cash-secured put
-- **Active contract:** None (cycle 1 complete)
-- **Cycle count:** 1
-- **Total premium collected (net):** $325.00
-  - Sold QBTS260605P00025000 @ $1.08 → +$540
-  - BTC at 60% profit @ $0.43 → -$215
-- **Shares held:** 0 (not yet assigned)
+### Key implementation details (all fixed 2026-06-22)
+- **Options-snapshot API quirk:** the per-contract `?symbols=<occ>` query returns empty quotes on this data tier, and the chain is empty without `feed=indicative`. ALL quote lookups go through `get_chain()` with `feed=indicative`. **This was the real cause of the chronic "no real bid" skips** — not just QBTS illiquidity.
+- **Capital split:** shared options buying power is divided fair-share across symbols each run (`obp / symbols_remaining`), recomputed per symbol from LIVE buying power.
+- **Buying-power reservation:** Alpaca reserves ~2× nominal collateral (strike×100) in options_buying_power per short put — sized via `SHORT_PUT_BP_FACTOR = 2.0`.
+- **Contract qty tracked in state** (`active_qty`) so covered calls never exceed shares held (no naked calls) and premium accounting is accurate.
+- **Capital reality:** ~$25–35K effective options BP across 4 names; IONQ (~$53 strike) is capital-heavy, so not all 4 always fill the same run — they rotate as contracts cycle.
+
+**Discontinued/disabled:** TSLA wheel, QBTS wheel (underlying switched), Momentum, GovtContracts, StrategyManager, both copy traders — all disabled 2026-06-22 per "only keep the wheel."
 
 ### Wheel Strategy Flow
 1. **Sell Cash-Secured Put** → collect premium; cash (strike × 100) reserved as collateral
@@ -245,7 +248,7 @@ Scans UBER, F, SMCI, DKNG, SOFI, RIVN, MARA — runs Monday 9:35 AM, emails at 9
 | `etf_flows.py` | 9:45 AM Mon-Fri | Alpaca Data | Unusual volume (>2x 20d avg) in SOXX, XLE, XLK, VNQ, ITA, ARKK |
 | `short_interest.py` | Mon & Wed 7:30 AM | FINRA | Squeeze setups (SI drops >20%) or bear warnings (SI rises >30%) |
 | `unusual_options.py` | Every 30min market hours | Alpaca Options | IV spikes (>1.8x hist vol) or put/call skew >1.6 in holdings |
-| `senate_disclosures.py` | Every 2h market hours | Capitol Trades | Warner, Tuberville, Rounds, Sullivan, Hoeven trades → $500 copied |
+| ~~`senate_disclosures.py`~~ | REMOVED 2026-06-11 | Capitol Trades | Discontinued with politician copy trader — positions liquidated, task deleted |
 
 ### Hedge Funds Tracked (13F)
 Berkshire (0001067983), Pershing Square (0001336528), Scion (0001649339),

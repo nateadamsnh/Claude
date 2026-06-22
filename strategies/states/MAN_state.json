@@ -1,0 +1,14 @@
+{
+  "symbol": "MAN",
+  "fill_price": 33.986797,
+  "highest_price": 36.13,
+  "stop_order_id": "db16a8ab-327d-468d-bd0e-2a109544e11c",
+  "stop_price": 30.59,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 14,
+  "initial_qty": 14.711300765
+}

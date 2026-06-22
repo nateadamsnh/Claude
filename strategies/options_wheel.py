@@ -1,32 +1,45 @@
 #!/usr/bin/env python3
 """
-QBTS Wheel Strategy
-====================
+Multi-Symbol Wheel Strategy
+============================
+Runs the wheel independently on each symbol in SYMBOLS. Shared cash is split
+evenly across the basket so no single symbol reserves all the collateral.
+
 Stage 1 - Cash Secured Put (CSP):
-  Sell 5 puts ~10% OTM, 14-28 DTE. Collect premium.
+  Sell puts ~10% OTM, 14-28 DTE (count scaled by cash budget + regime).
   - Expires worthless  -> sell another CSP (repeat Stage 1)
-  - Assigned           -> take 500 shares, move to Stage 2
+  - Assigned           -> take shares, move to Stage 2
   - 50% profit hit     -> buy to close early, sell another CSP
 
 Stage 2 - Covered Call (CC):
-  Sell 5 calls ~10% above cost basis, 14-28 DTE. Collect premium.
+  Sell one call per 100 shares held, ~10% above cost basis, 14-28 DTE.
   - Expires worthless  -> sell another CC (repeat Stage 2)
   - Called away        -> shares sold at strike, return to Stage 1
   - 50% profit hit     -> buy to close early, sell another CC
 
 Rules:
-  - Never sell a CSP unless cash >= strike * 100 * 5
+  - Cash budget per symbol = total cash / number of symbols
+  - Never sell more CCs than (shares_held // 100) — never go naked
   - Never sell a CC below cost basis (what you paid for shares)
+  - Only trade contracts with a real bid AND spread <= 25% of mid
   - Close early at 50% profit
-  - Check every 15 min during market hours (09:30-16:00 ET)
-  - Daily summary logged near market close (~15:50)
+  - Bear regime pauses new CSPs
   - Do nothing outside market hours
 
-State: Trading/strategies/qbts_wheel_state.json
-Log  : Trading/logs/qbts_wheel.log
+State: Trading/strategies/{symbol}_wheel_state.json (one per symbol)
+Log  : Trading/logs/wheel.log (shared)
+
+History: QBTS -> MARA 2026-06-12, then opened to a basket 2026-06-22. The old
+single-symbol QBTS history is preserved in qbts_wheel_state.json.
+
+KNOWN API QUIRK (fixed 2026-06-22): the per-contract options snapshot query
+(?symbols=<occ>) returns empty quotes on this data tier, and the chain is empty
+without feed=indicative. All quote lookups go through get_chain() with the
+indicative feed — this was the real cause of the chronic "no real bid" skips.
 """
 
 import json
+import re
 import sys
 import requests
 import logging
@@ -34,12 +47,26 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from regime_detector import get_regime, regime_contracts_multiplier
 
+# ── Strategy Symbols ──────────────────────────────────────────────────────────
+# The wheel runs independently on each symbol; every symbol keeps its own state
+# file so their CSP/CC stages never interfere. Edit this list to change the
+# basket. Shared cash is split evenly across symbols (see run()).
+SYMBOLS = ["MARA", "SOFI", "IONQ", "DKNG"]
+
+# SYMBOL and STATE_FILE form the "current symbol" context, reassigned per symbol
+# inside run(). The per-symbol functions read these module globals.
+SYMBOL = SYMBOLS[0]
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config" / "alpaca_credentials.json"
-STATE_FILE  = BASE_DIR / "strategies" / "qbts_wheel_state.json"
-LOG_FILE    = BASE_DIR / "logs" / "qbts_wheel.log"
+LOG_FILE    = BASE_DIR / "logs" / "wheel.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+def state_file_for(sym: str) -> Path:
+    return BASE_DIR / "strategies" / f"{sym.lower()}_wheel_state.json"
+
+STATE_FILE = state_file_for(SYMBOL)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -66,7 +93,6 @@ HEADERS  = {
 DATA_URL = "https://data.alpaca.markets"
 
 # ── Strategy Parameters ────────────────────────────────────────────────────────
-SYMBOL          = "QBTS"
 PUT_OTM_PCT     = 0.10          # Sell put 10% below current price
 CALL_OTM_PCT    = 0.10          # Sell call 10% above cost basis
 DTE_MIN         = 14            # Min days to expiration when entering
@@ -74,6 +100,8 @@ DTE_MAX         = 28            # Max days to expiration when entering
 EARLY_CLOSE_PCT = 0.50          # Close when 50% of premium is profit
 NUM_CONTRACTS   = 5             # 5 contracts = 500 shares of exposure
 SUMMARY_TIME    = time(15, 50)  # Start logging daily summary after this time
+SHORT_PUT_BP_FACTOR = 2.0       # Options buying power reserved per short put,
+                                # as a multiple of nominal collateral (strike*100)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -85,10 +113,11 @@ def load_state() -> dict:
         "stage":             "CSP",  # "CSP" or "CC"
         "active_contract":   None,   # OCC symbol of open short option
         "active_order_id":   None,   # order ID of the sell-to-open
+        "active_qty":        0,      # number of contracts in the open position
         "order_filled":      False,  # True once the STO order confirms filled
         "premium_sold":      0.0,    # credit per share received (fill price)
         "cost_basis":        None,   # per-share cost basis (CC stage only)
-        "shares_held":       0,      # QBTS shares held (CC stage only)
+        "shares_held":       0,      # Underlying shares held (CC stage only)
         "total_premium":     0.0,    # cumulative premium collected all time
         "cycle_count":       0,      # completed CSP->CC->CSP cycles
         "premium_history":   [],     # list of {date, type, contract, premium, total}
@@ -136,17 +165,40 @@ def get_order(order_id: str) -> dict:
     r = requests.get(f"{BASE_URL}/orders/{order_id}", headers=HEADERS, timeout=10)
     return r.json() if r.status_code == 200 else {}
 
-def get_option_snapshot(contract_symbol: str) -> dict:
-    """Get bid/ask snapshot for one QBTS options contract."""
-    r = requests.get(
-        f"{DATA_URL}/v1beta1/options/snapshots/{SYMBOL}",
-        headers=HEADERS,
-        params={"symbols": contract_symbol},
-        timeout=10,
-    )
-    if r.status_code == 200:
-        return r.json().get("snapshots", {}).get(contract_symbol, {})
-    return {}
+def get_chain(underlying: str, option_type: str) -> dict:
+    """Bulk-fetch every snapshot for one underlying + option type using the
+    indicative feed. Returns {occ_symbol: snapshot}.
+
+    The per-contract `?symbols=<occ>` query returns empty quotes (bid/ask None)
+    on this data tier — and WITHOUT feed=indicative the chain is empty too.
+    Pulling the whole chain with feed=indicative is the only path that yields
+    real bids, so all quote lookups go through here.
+    """
+    out: dict = {}
+    token = None
+    while True:
+        params = {"feed": "indicative", "type": option_type, "limit": 1000}
+        if token:
+            params["page_token"] = token
+        r = requests.get(f"{DATA_URL}/v1beta1/options/snapshots/{underlying}",
+                         headers=HEADERS, params=params, timeout=20)
+        if r.status_code != 200:
+            break
+        j = r.json()
+        out.update(j.get("snapshots", {}))
+        token = j.get("next_page_token")
+        if not token:
+            break
+    return out
+
+def snapshot_for(contract_symbol: str) -> dict:
+    """Single-contract snapshot lookup via the bulk chain (parses type from OCC)."""
+    m = re.match(r"^([A-Z]+)\d{6}([CP])\d{8}$", contract_symbol)
+    if not m:
+        return {}
+    underlying = m.group(1)
+    option_type = "call" if m.group(2) == "C" else "put"
+    return get_chain(underlying, option_type).get(contract_symbol, {})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -173,9 +225,11 @@ def _get_contracts(option_type: str, strike_gte: float, strike_lte: float) -> li
     )
     return r.json().get("option_contracts", []) if r.status_code == 200 else []
 
-def _best_contract(contracts: list, target_strike: float,
+def _best_contract(contracts: list, target_strike: float, chain: dict,
                    min_strike: float = None, max_strike: float = None) -> dict | None:
-    """Among contracts with a real bid, return the one closest to target strike."""
+    """Among contracts with a real bid (looked up in the pre-fetched chain),
+    return the one closest to target strike. Also enforces the spread filter
+    (bid-ask <= 25% of mid) so we never sell into an illiquid book."""
     best = None
     best_dist = float("inf")
     for c in contracts:
@@ -184,11 +238,14 @@ def _best_contract(contracts: list, target_strike: float,
             continue
         if max_strike is not None and strike > max_strike:
             continue
-        snap  = get_option_snapshot(c["symbol"])
+        snap  = chain.get(c["symbol"], {})
         quote = snap.get("latestQuote", {})
-        bid   = quote.get("bp", 0)
-        ask   = quote.get("ap", 0)
-        if bid <= 0:
+        bid   = quote.get("bp") or 0
+        ask   = quote.get("ap") or 0
+        if bid <= 0 or ask <= 0:
+            continue
+        mid = (bid + ask) / 2
+        if mid <= 0 or (ask - bid) / mid > 0.25:   # spread too wide -> illiquid
             continue
         dist = abs(strike - target_strike)
         if dist < best_dist:
@@ -199,7 +256,7 @@ def _best_contract(contracts: list, target_strike: float,
                 "exp":    c["expiration_date"],
                 "bid":    bid,
                 "ask":    ask,
-                "mid":    round((bid + ask) / 2, 2),
+                "mid":    round(mid, 2),
             }
     return best
 
@@ -209,9 +266,10 @@ def find_put_contract(current_price: float) -> dict | None:
     if not contracts:
         log.warning(f"  No put contracts returned from API near ${target:.2f}")
         return None
-    result = _best_contract(contracts, target)
+    chain  = get_chain(SYMBOL, "put")
+    result = _best_contract(contracts, target, chain)
     if not result:
-        log.warning(f"  Put contracts found but none have a real bid near ${target:.2f}")
+        log.warning(f"  Put contracts found but none have a liquid bid near ${target:.2f}")
     return result
 
 def find_call_contract(cost_basis: float) -> dict | None:
@@ -220,9 +278,10 @@ def find_call_contract(cost_basis: float) -> dict | None:
     if not contracts:
         log.warning(f"  No call contracts returned from API near ${target:.2f}")
         return None
-    result = _best_contract(contracts, target, min_strike=cost_basis)
+    chain  = get_chain(SYMBOL, "call")
+    result = _best_contract(contracts, target, chain, min_strike=cost_basis)
     if not result:
-        log.warning(f"  Call contracts found but none are above cost basis ${cost_basis:.2f} with a real bid")
+        log.warning(f"  Call contracts found but none are above cost basis ${cost_basis:.2f} with a liquid bid")
     return result
 
 
@@ -255,11 +314,11 @@ def sell_to_open(contract: dict, label: str, qty: int = NUM_CONTRACTS) -> dict:
         log.error(f"  [{label}] ORDER FAILED {r.status_code}: {r.text[:300]}")
     return order
 
-def buy_to_close(contract_symbol: str, limit_price: float, label: str) -> dict:
-    """Buy NUM_CONTRACTS to close at limit price."""
+def buy_to_close(contract_symbol: str, limit_price: float, label: str, qty: int) -> dict:
+    """Buy `qty` contracts to close at limit price."""
     payload = {
         "symbol":        contract_symbol,
-        "qty":           str(NUM_CONTRACTS),
+        "qty":           str(qty),
         "side":          "buy",
         "type":          "limit",
         "limit_price":   str(round(limit_price, 2)),
@@ -269,7 +328,7 @@ def buy_to_close(contract_symbol: str, limit_price: float, label: str) -> dict:
     order = r.json()
     if r.status_code in (200, 201):
         log.info(
-            f"  [{label}] Closing {contract_symbol} x{NUM_CONTRACTS} @ "
+            f"  [{label}] Closing {contract_symbol} x{qty} @ "
             f"${limit_price:.2f}/sh | {order.get('id','')[:8]} | {order.get('status')}"
         )
     else:
@@ -281,12 +340,15 @@ def buy_to_close(contract_symbol: str, limit_price: float, label: str) -> dict:
 # CSP stage logic
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_csp(state: dict, positions: dict, account: dict):
+def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
     log.info("  -- Stage 1: Cash Secured Put (CSP) --")
 
     current_price = get_latest_stock_price(SYMBOL)
-    cash          = float(account["cash"])
-    log.info(f"  {SYMBOL}: ${current_price:.2f} | Cash: ${cash:,.2f}")
+    # Cap usable cash to this symbol's share of the budget so one symbol can't
+    # consume all collateral before the others get a turn.
+    cash          = min(float(account["cash"]), cash_budget)
+    log.info(f"  {SYMBOL}: ${current_price:.2f} | Cash budget: ${cash:,.2f} "
+             f"(account cash ${float(account['cash']):,.2f})")
 
     # ── No active contract: check regime then sell new puts ──────────────────
     if not state["active_contract"]:
@@ -314,21 +376,25 @@ def run_csp(state: dict, positions: dict, account: dict):
             )
 
         target_strike = current_price * (1 - PUT_OTM_PCT)
-        required_cash = target_strike * 100 * contracts_to_sell
-        if cash < required_cash:
-            # Scale down to however many contracts cash actually supports (min 1)
-            affordable = max(1, int(cash // (target_strike * 100)))
+        # Alpaca reserves roughly SHORT_PUT_BP_FACTOR x nominal collateral in
+        # options buying power per short put (empirically ~2x on this margin
+        # account), so size against that, not bare strike x 100.
+        bp_per_contract = target_strike * 100 * SHORT_PUT_BP_FACTOR
+        required_bp     = bp_per_contract * contracts_to_sell
+        if cash < required_bp:
+            affordable = int(cash // bp_per_contract)
             if affordable < contracts_to_sell:
                 log.info(
-                    f"  Cash ${cash:,.0f} insufficient for {contracts_to_sell} CSPs "
-                    f"(need ${required_cash:,.0f}). Scaling down to {affordable} contract(s)."
+                    f"  Budget ${cash:,.0f} insufficient for {contracts_to_sell} CSPs "
+                    f"(need ${required_bp:,.0f} buying power). Scaling down to "
+                    f"{affordable} contract(s)."
                 )
                 contracts_to_sell = affordable
-            # Final check: if we can't even afford 1 contract, skip
-            if cash < target_strike * 100:
+            # If we can't even afford 1 contract, skip this symbol this run
+            if contracts_to_sell < 1:
                 log.warning(
-                    f"  Insufficient cash ${cash:,.0f} for even 1 CSP "
-                    f"(need ${target_strike * 100:,.0f}). Skipping."
+                    f"  Insufficient budget ${cash:,.0f} for even 1 CSP "
+                    f"(need ${bp_per_contract:,.0f}). Skipping {SYMBOL} this run."
                 )
                 return
 
@@ -345,6 +411,7 @@ def run_csp(state: dict, positions: dict, account: dict):
         if order.get("id"):
             state["active_contract"] = contract["symbol"]
             state["active_order_id"] = order["id"]
+            state["active_qty"]      = contracts_to_sell
             state["order_filled"]    = False
             state["premium_sold"]    = contract["mid"]
             save_state(state)
@@ -356,19 +423,20 @@ def run_csp(state: dict, positions: dict, account: dict):
         status = order.get("status", "unknown")
         if status == "filled":
             fill_px = float(order.get("filled_avg_price") or state["premium_sold"])
+            qty     = state.get("active_qty") or NUM_CONTRACTS
             state["premium_sold"]  = fill_px
             state["order_filled"]  = True
-            state["total_premium"] += fill_px * 100 * NUM_CONTRACTS
+            state["total_premium"] += fill_px * 100 * qty
             state["premium_history"].append({
                 "date":     str(date.today()),
                 "type":     "CSP",
                 "contract": state["active_contract"],
                 "premium":  fill_px,
-                "total":    round(fill_px * 100 * NUM_CONTRACTS, 2),
+                "total":    round(fill_px * 100 * qty, 2),
             })
             log.info(
-                f"  CSP confirmed filled @ ${fill_px:.2f}/sh "
-                f"(${fill_px*100*NUM_CONTRACTS:.2f} total credit) | "
+                f"  CSP confirmed filled @ ${fill_px:.2f}/sh x{qty} "
+                f"(${fill_px*100*qty:.2f} total credit) | "
                 f"Cumulative premium: ${state['total_premium']:,.2f}"
             )
             save_state(state)
@@ -384,11 +452,11 @@ def run_csp(state: dict, positions: dict, account: dict):
     # ── Filled: check if still in position ───────────────────────────────────
     contract_symbol = state["active_contract"]
     if contract_symbol not in positions:
-        tsla_pos = positions.get(SYMBOL)
-        if tsla_pos:
+        stock_pos = positions.get(SYMBOL)
+        if stock_pos:
             # ASSIGNED
-            shares     = float(tsla_pos["qty"])
-            cost_basis = float(tsla_pos["avg_entry_price"])
+            shares     = float(stock_pos["qty"])
+            cost_basis = float(stock_pos["avg_entry_price"])
             log.info(
                 f"  !! CSP ASSIGNED at ${cost_basis:.2f} — "
                 f"now holding {shares:.0f} {SYMBOL} shares. Moving to Stage 2 (CC)."
@@ -398,11 +466,12 @@ def run_csp(state: dict, positions: dict, account: dict):
             state["shares_held"]     = int(shares)
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         else:
             # EXPIRED WORTHLESS
-            total_kept = state["premium_sold"] * 100 * NUM_CONTRACTS
+            total_kept = state["premium_sold"] * 100 * (state.get("active_qty") or NUM_CONTRACTS)
             log.info(
                 f"  CSP expired worthless! "
                 f"Kept ${state['premium_sold']:.2f}/sh (${total_kept:.2f} total). "
@@ -410,13 +479,14 @@ def run_csp(state: dict, positions: dict, account: dict):
             )
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         save_state(state)
         return
 
     # ── Still open: check for 50% profit ─────────────────────────────────────
-    snap  = get_option_snapshot(contract_symbol)
+    snap  = snapshot_for(contract_symbol)
     quote = snap.get("latestQuote", {})
     bid   = quote.get("bp", 0)
     ask   = quote.get("ap", 0)
@@ -435,10 +505,12 @@ def run_csp(state: dict, positions: dict, account: dict):
 
     if profit_pct >= EARLY_CLOSE_PCT:
         log.info(f"  >> {EARLY_CLOSE_PCT*100:.0f}% profit target hit! Buying to close.")
-        btc = buy_to_close(contract_symbol, current_mid, "CSP-BTC")
+        btc = buy_to_close(contract_symbol, current_mid, "CSP-BTC",
+                           qty=state.get("active_qty") or NUM_CONTRACTS)
         if btc.get("id"):
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             save_state(state)
     else:
@@ -465,7 +537,7 @@ def run_cc(state: dict, positions: dict, account: dict):
     )
 
     if SYMBOL not in positions:
-        log.info("  QBTS position gone — shares were called away. Returning to Stage 1 (CSP).")
+        log.info(f"  {SYMBOL} position gone — shares were called away. Returning to Stage 1 (CSP).")
         state["stage"]           = "CSP"
         state["cost_basis"]      = None
         state["shares_held"]     = 0
@@ -489,15 +561,22 @@ def run_cc(state: dict, positions: dict, account: dict):
             )
             return
 
+        # Sell one call per 100 shares actually held — never more (would be naked)
+        cc_qty = int(shares_held // 100)
+        if cc_qty < 1:
+            log.warning(f"  Only {shares_held} shares held — fewer than 100, can't sell a covered call.")
+            return
+
         log.info(
-            f"  Selling {NUM_CONTRACTS} CCs: strike ${contract['strike']:.2f} "
+            f"  Selling {cc_qty} CCs: strike ${contract['strike']:.2f} "
             f"(${contract['strike']-cost_basis:+.2f} vs basis), "
             f"exp {contract['exp']}, mid ${contract['mid']:.2f}"
         )
-        order = sell_to_open(contract, "CC-STO")
+        order = sell_to_open(contract, "CC-STO", qty=cc_qty)
         if order.get("id"):
             state["active_contract"] = contract["symbol"]
             state["active_order_id"] = order["id"]
+            state["active_qty"]      = cc_qty
             state["order_filled"]    = False
             state["premium_sold"]    = contract["mid"]
             save_state(state)
@@ -509,19 +588,20 @@ def run_cc(state: dict, positions: dict, account: dict):
         status = order.get("status", "unknown")
         if status == "filled":
             fill_px = float(order.get("filled_avg_price") or state["premium_sold"])
+            qty     = state.get("active_qty") or NUM_CONTRACTS
             state["premium_sold"]  = fill_px
             state["order_filled"]  = True
-            state["total_premium"] += fill_px * 100 * NUM_CONTRACTS
+            state["total_premium"] += fill_px * 100 * qty
             state["premium_history"].append({
                 "date":     str(date.today()),
                 "type":     "CC",
                 "contract": state["active_contract"],
                 "premium":  fill_px,
-                "total":    round(fill_px * 100 * NUM_CONTRACTS, 2),
+                "total":    round(fill_px * 100 * qty, 2),
             })
             log.info(
-                f"  CC confirmed filled @ ${fill_px:.2f}/sh "
-                f"(${fill_px*100*NUM_CONTRACTS:.2f} total credit) | "
+                f"  CC confirmed filled @ ${fill_px:.2f}/sh x{qty} "
+                f"(${fill_px*100*qty:.2f} total credit) | "
                 f"Cumulative premium: ${state['total_premium']:,.2f}"
             )
             save_state(state)
@@ -548,11 +628,12 @@ def run_cc(state: dict, positions: dict, account: dict):
             state["shares_held"]     = 0
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         else:
             # EXPIRED WORTHLESS
-            total_kept = state["premium_sold"] * 100 * NUM_CONTRACTS
+            total_kept = state["premium_sold"] * 100 * (state.get("active_qty") or NUM_CONTRACTS)
             log.info(
                 f"  CC expired worthless! "
                 f"Kept ${state['premium_sold']:.2f}/sh (${total_kept:.2f} total). "
@@ -560,13 +641,14 @@ def run_cc(state: dict, positions: dict, account: dict):
             )
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         save_state(state)
         return
 
     # ── Still open: check for 50% profit ─────────────────────────────────────
-    snap  = get_option_snapshot(contract_symbol)
+    snap  = snapshot_for(contract_symbol)
     quote = snap.get("latestQuote", {})
     bid   = quote.get("bp", 0)
     ask   = quote.get("ap", 0)
@@ -585,10 +667,12 @@ def run_cc(state: dict, positions: dict, account: dict):
 
     if profit_pct >= EARLY_CLOSE_PCT:
         log.info(f"  >> {EARLY_CLOSE_PCT*100:.0f}% profit target hit! Buying to close.")
-        btc = buy_to_close(contract_symbol, current_mid, "CC-BTC")
+        btc = buy_to_close(contract_symbol, current_mid, "CC-BTC",
+                           qty=state.get("active_qty") or NUM_CONTRACTS)
         if btc.get("id"):
             state["active_contract"] = None
             state["active_order_id"] = None
+            state["active_qty"]      = 0
             state["order_filled"]    = False
             save_state(state)
     else:
@@ -615,7 +699,7 @@ def log_daily_summary(state: dict, account: dict, positions: dict):
 
     log.info("")
     log.info("=" * 65)
-    log.info("QBTS WHEEL STRATEGY -- DAILY CLOSE SUMMARY")
+    log.info(f"{SYMBOL} WHEEL STRATEGY -- DAILY CLOSE SUMMARY")
     log.info(f"  {datetime.now().strftime('%Y-%m-%d %H:%M ET')}")
     log.info("=" * 65)
     log.info(f"  Portfolio Value  : ${port_val:>12,.2f}")
@@ -628,9 +712,9 @@ def log_daily_summary(state: dict, account: dict, positions: dict):
     log.info(f"  Total Premium    : ${state['total_premium']:>10,.2f}")
 
     if state["stage"] == "CC" and state.get("cost_basis"):
-        qbts_pos   = positions.get(SYMBOL, {})
-        curr_price = float(qbts_pos.get("current_price", 0))
-        unreal_pl  = float(qbts_pos.get("unrealized_pl", 0))
+        stock_pos  = positions.get(SYMBOL, {})
+        curr_price = float(stock_pos.get("current_price", 0))
+        unreal_pl  = float(stock_pos.get("unrealized_pl", 0))
         log.info(f"  Cost Basis       : ${state['cost_basis']:.2f}/share")
         log.info(f"  Shares Held      : {state['shares_held']}")
         log.info(f"  {SYMBOL} @ Market : ${curr_price:.2f} | Unrealized P/L: ${unreal_pl:+,.2f}")
@@ -654,32 +738,60 @@ def log_daily_summary(state: dict, account: dict, positions: dict):
 # Main
 # ══════════════════════════════════════════════════════════════════════════════
 
+def process_symbol(cash_budget: float):
+    """Run one wheel iteration for the current SYMBOL/STATE_FILE context."""
+    state     = load_state()
+    account   = get_account()       # re-fetched per symbol so cash reflects
+    positions = get_positions()     # collateral already reserved by earlier symbols
+
+    try:
+        if state["stage"] == "CSP":
+            run_csp(state, positions, account, cash_budget)
+        elif state["stage"] == "CC":
+            run_cc(state, positions, account)
+        else:
+            log.error(f"Unknown stage: {state['stage']}")
+    except Exception as e:
+        log.error(f"  {SYMBOL} strategy error: {e}", exc_info=True)
+
+    if datetime.now().time() >= SUMMARY_TIME:
+        state = load_state()
+        log_daily_summary(state, account, positions)
+
+
 def run():
+    global SYMBOL, STATE_FILE
     log.info("=" * 65)
-    log.info(f"QBTS Wheel Strategy  |  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log.info(f"WHEEL STRATEGY ({', '.join(SYMBOLS)})  |  "
+             f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info("=" * 65)
 
     if not market_is_open():
         log.info("Market is closed. No action taken.")
         return
 
-    state     = load_state()
-    account   = get_account()
-    positions = get_positions()
-
-    try:
-        if state["stage"] == "CSP":
-            run_csp(state, positions, account)
-        elif state["stage"] == "CC":
-            run_cc(state, positions, account)
-        else:
-            log.error(f"Unknown stage: {state['stage']}")
-    except Exception as e:
-        log.error(f"Strategy error: {e}", exc_info=True)
-
-    if datetime.now().time() >= SUMMARY_TIME:
-        state = load_state()
-        log_daily_summary(state, account, positions)
+    # Budget each symbol a fair share of the LIVE options buying power — not
+    # cash. Alpaca reserves options_buying_power (~half of cash here) as each
+    # CSP is placed, even before fill, so we re-read it per symbol and divide by
+    # the symbols still to go. This self-corrects as capital binds/frees.
+    for i, sym in enumerate(SYMBOLS):
+        SYMBOL     = sym
+        STATE_FILE = state_file_for(sym)
+        log.info(f"\n--- {sym} ---")
+        try:
+            acct = get_account()
+            obp  = float(acct.get("options_buying_power") or acct.get("cash") or 0)
+        except Exception as e:
+            log.error(f"  {sym}: could not fetch account: {e}")
+            continue
+        remaining = len(SYMBOLS) - i
+        budget    = obp / remaining if remaining else 0
+        log.info(f"  Options buying power ${obp:,.2f} / {remaining} left "
+                 f"= ${budget:,.2f} budget")
+        try:
+            process_symbol(budget)
+        except Exception as e:
+            log.error(f"  {sym} failed: {e}", exc_info=True)
 
     log.info("Run complete.\n")
 

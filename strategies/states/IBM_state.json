@@ -8,7 +8,7 @@
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false,
+  "position_closed": true,
   "whole_qty": 2,
   "initial_qty": 2.003365654
 }

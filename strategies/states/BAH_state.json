@@ -1,0 +1,14 @@
+{
+  "symbol": "BAH",
+  "fill_price": 77.590668,
+  "highest_price": 77.590668,
+  "stop_order_id": "5a71a0e8-ab06-4c03-a936-bec924bc4084",
+  "stop_price": 69.83,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 6,
+  "initial_qty": 6.443945036
+}

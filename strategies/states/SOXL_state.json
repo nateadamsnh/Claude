@@ -1,0 +1,14 @@
+{
+  "symbol": "SOXL",
+  "fill_price": 265.758,
+  "highest_price": 274.76,
+  "stop_order_id": "50b44ccd-e9ca-440a-9934-14f3d8593e1a",
+  "stop_price": 239.18,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 1,
+  "initial_qty": 1.881373279
+}

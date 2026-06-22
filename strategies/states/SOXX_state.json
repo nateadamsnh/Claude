@@ -1,14 +1,14 @@
 {
   "symbol": "SOXX",
   "fill_price": 576.53,
-  "highest_price": 618.29,
-  "stop_price": 518.88,
-  "stop_order_id": "8d405efa-32dd-4ad9-9f81-f96185b77cf4",
+  "highest_price": 655.48,
+  "stop_price": 622.71,
+  "stop_order_id": "db5546a2-b6be-401e-aad6-2583f97417ca",
   "whole_qty": 3,
   "initial_qty": 3.0,
-  "trailing_active": false,
+  "trailing_active": true,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }

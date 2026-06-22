@@ -1,0 +1,14 @@
+{
+  "symbol": "LDOS",
+  "fill_price": 115.6,
+  "highest_price": 116.11,
+  "stop_order_id": "a5155034-3158-4ba4-961e-3fe8cc0c1a74",
+  "stop_price": 104.04,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 4,
+  "initial_qty": 4.32517301
+}

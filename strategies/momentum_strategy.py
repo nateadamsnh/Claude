@@ -41,7 +41,7 @@ BASE_DIR   = Path(__file__).parent
 CREDS_FILE = BASE_DIR.parent / "config" / "alpaca_credentials.json"
 EMAIL_FILE = BASE_DIR.parent / "config" / "email_config.json"
 STATE_FILE = BASE_DIR / "strategy_state.json"
-LOG_FILE   = BASE_DIR.parent.parent / "logs" / "momentum_strategy.log"
+LOG_FILE   = BASE_DIR.parent / "logs" / "momentum_strategy.log"
 LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── Logging ────────────────────────────────────────────────────────────────────

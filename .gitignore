@@ -12,6 +12,8 @@ config/webhook_config.json
 strategies/strategy_state.json
 strategies/regime_state.json
 strategies/qbts_wheel_state.json
+strategies/*_wheel_state.json
+strategies/govt_contracts_state.json
 politician-copy-trader/state.json
 signals/states/
 config/wheel_state.json

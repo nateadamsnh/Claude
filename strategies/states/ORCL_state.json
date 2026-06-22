@@ -1,14 +1,14 @@
 {
-  "symbol": "SYK",
-  "fill_price": 314.518,
-  "highest_price": 318.85,
+  "symbol": "ORCL",
+  "fill_price": 185.251975,
+  "highest_price": 195.23,
   "stop_order_id": null,
-  "stop_price": 283.07,
+  "stop_price": 185.554,
   "trailing_active": false,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
   "position_closed": true,
-  "whole_qty": 1,
-  "initial_qty": 1.589734132
+  "whole_qty": 11,
+  "initial_qty": 11.44900074
 }

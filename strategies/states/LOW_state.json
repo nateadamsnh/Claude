@@ -2,13 +2,13 @@
   "symbol": "LOW",
   "fill_price": 218.01,
   "highest_price": 221.405,
-  "stop_order_id": "b16569ba-5f2a-4262-858d-6728f2fa10cb",
+  "stop_order_id": null,
   "stop_price": 196.21,
   "trailing_active": false,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false,
+  "position_closed": true,
   "whole_qty": 2,
   "initial_qty": 2.293472776
 }

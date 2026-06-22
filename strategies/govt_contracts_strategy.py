@@ -239,7 +239,6 @@ def run():
     log.info(f"  Found {len(awards)} contracts above threshold")
 
     current_positions = get_current_positions()
-    market_open       = is_market_open()
     new_trades        = []
 
     for a in awards:
@@ -269,14 +268,18 @@ def run():
             log.info(f"    Already hold {ticker} — skipping new buy (strategy manager handles it)")
             continue
 
-        # Execute trade
-        if market_open:
-            order  = buy_stock(ticker)
-            status = order.get("status", "error")
-            log.info(f"    BUY {ticker} ${TRADE_AMOUNT} — order status: {status}")
+        # Execute trade — always place the order. Day orders submitted while
+        # the market is closed are queued by Alpaca and fill at the next open.
+        # (The old code only logged "queued" without placing anything, so the
+        # strategy never traded — fixed 2026-06-11.)
+        order    = buy_stock(ticker)
+        order_id = order.get("id")
+        if order_id:
+            status = order.get("status", "accepted")
+            log.info(f"    BUY {ticker} ${TRADE_AMOUNT} — order {order_id[:8]} status: {status}")
         else:
-            status = "queued (market closed)"
-            log.info(f"    QUEUED: BUY {ticker} ${TRADE_AMOUNT} — market closed, will execute at open")
+            status = f"error: {str(order.get('message', 'unknown'))[:60]}"
+            log.error(f"    BUY {ticker} FAILED — {status}")
 
         trade_record = {
             "award_id":       award_id,
@@ -287,11 +290,13 @@ def run():
             "description":    desc,
             "award_date":     award_date,
             "traded_date":    today_str,
+            "order_id":       order_id,
             "order_status":   status,
             "trade_amount":   TRADE_AMOUNT,
         }
         state["traded_tickers"][award_id] = trade_record
-        state["total_deployed"] = state.get("total_deployed", 0) + TRADE_AMOUNT
+        if order_id:  # Only count capital actually deployed
+            state["total_deployed"] = state.get("total_deployed", 0) + TRADE_AMOUNT
         current_positions.add(ticker)  # Prevent double-buy within same run
         new_trades.append(trade_record)
 
