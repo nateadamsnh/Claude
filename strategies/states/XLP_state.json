@@ -5,7 +5,7 @@
   "initial_qty": 6,
   "stop_price": 74.2,
   "stop_order_id": "eb288e34-cc37-4ca4-ac72-c8d488e44881",
-  "highest_price": 82.55,
+  "highest_price": 85.93,
   "trailing_active": false,
   "ladder_fired": false,
   "ladder_filled": false,

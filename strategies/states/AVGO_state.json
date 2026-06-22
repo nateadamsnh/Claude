@@ -1,0 +1,14 @@
+{
+  "symbol": "AVGO",
+  "fill_price": 398.732,
+  "highest_price": 407.53,
+  "stop_order_id": "9b90479c-142b-4fe7-afcd-076c6f1f4cd7",
+  "stop_price": 358.86,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 1,
+  "initial_qty": 1.253950021
+}

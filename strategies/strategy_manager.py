@@ -238,10 +238,14 @@ def check_symbol(symbol):
     current_price = get_latest_price(symbol)
     pct_from_fill = (current_price - fill_price) / fill_price * 100
 
+    # Sync stop size when the position grows (new buys add shares)
+    if floor(held_qty) > state.get("whole_qty", 0):
+        state["whole_qty"] = floor(held_qty)
+
     # Ensure stop order exists
     open_orders  = get_open_orders_for(symbol)
     stop_orders  = [o for o in open_orders
-                    if o.get("type") == "stop" and o.get("side") == "sell"]
+                    if o.get("type") in ("stop", "trailing_stop") and o.get("side") == "sell"]
 
     if not stop_orders:
         log.info(f"  {symbol:6s} | !! No active stop — re-placing at ${current_stop:.2f}")
@@ -255,6 +259,12 @@ def check_symbol(symbol):
         if raw_stop is not None:
             state["stop_price"] = float(raw_stop)
         current_stop = state["stop_price"]
+        # Upsize an undersized stop so all whole shares stay covered
+        # (trailing stops are managed externally — leave those alone)
+        stop_qty = int(float(stop_orders[0].get("qty") or 0))
+        if stop_orders[0].get("type") == "stop" and state["whole_qty"] > stop_qty:
+            log.info(f"  {symbol:6s} | UPSIZING stop {stop_qty} -> {state['whole_qty']} shares @ ${current_stop:.2f}")
+            update_stop(symbol, state, current_stop)
 
     # Update highest price
     if current_price > highest_price:

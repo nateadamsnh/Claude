@@ -1,0 +1,14 @@
+{
+  "symbol": "AB",
+  "fill_price": 37.07,
+  "highest_price": 37.25,
+  "stop_order_id": "6dc9ec9e-9403-45c5-aa2b-7f37d5504641",
+  "stop_price": 33.36,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 13,
+  "initial_qty": 13.487725923
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "TEM",
+  "fill_price": 48.244473,
+  "highest_price": 52.285,
+  "stop_order_id": "7353cc68-d7d6-490d-9b16-ee201f74beda",
+  "stop_price": 43.42,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 10,
+  "initial_qty": 10.363674061
+}

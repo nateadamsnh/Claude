@@ -1,0 +1,14 @@
+{
+  "symbol": "URA",
+  "fill_price": 47.87,
+  "highest_price": 47.87,
+  "stop_order_id": "87447922-eafe-4f8b-b0b9-d8438723515d",
+  "stop_price": 43.08,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": true,
+  "whole_qty": 41,
+  "initial_qty": 41.0
+}
