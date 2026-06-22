@@ -1,0 +1,14 @@
+{
+  "symbol": "RTX",
+  "fill_price": 193.44,
+  "highest_price": 193.44,
+  "stop_order_id": "3dc9b09f-f13f-4858-ba9a-30ada36b1caa",
+  "stop_price": 174.1,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.584729114
+}

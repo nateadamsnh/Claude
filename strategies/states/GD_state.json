@@ -1,0 +1,14 @@
+{
+  "symbol": "GD",
+  "fill_price": 361.15,
+  "highest_price": 366.7,
+  "stop_order_id": "8120c676-a162-485d-bc60-32ab96255205",
+  "stop_price": 325.03,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 1,
+  "initial_qty": 1.384438598
+}

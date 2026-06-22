@@ -2,13 +2,13 @@
   "symbol": "XOM",
   "fill_price": 146.836923,
   "highest_price": 154.9,
-  "stop_price": 132.15,
-  "stop_order_id": "a778ee4a-6e2c-47a9-9d53-6ca2cfd6dbd8",
-  "whole_qty": 13,
+  "stop_price": 141.4645,
+  "stop_order_id": null,
+  "whole_qty": 17,
   "initial_qty": 13.0,
   "trailing_active": false,
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }

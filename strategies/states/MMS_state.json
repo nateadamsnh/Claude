@@ -1,0 +1,14 @@
+{
+  "symbol": "MMS",
+  "fill_price": 62.32,
+  "highest_price": 62.32,
+  "stop_order_id": "e0fe1194-8e0a-4167-9082-63501fff1289",
+  "stop_price": 56.09,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 8,
+  "initial_qty": 5.0
+}

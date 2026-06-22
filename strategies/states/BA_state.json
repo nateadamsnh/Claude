@@ -1,0 +1,14 @@
+{
+  "symbol": "BA",
+  "fill_price": 223.15,
+  "highest_price": 223.15,
+  "stop_order_id": "4e4929a1-00a8-4331-a6f2-4f242b924786",
+  "stop_price": 200.84,
+  "trailing_active": false,
+  "ladder_fired": false,
+  "ladder_order_id": null,
+  "ladder_filled": false,
+  "position_closed": false,
+  "whole_qty": 2,
+  "initial_qty": 2.240600492
+}

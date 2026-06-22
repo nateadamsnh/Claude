@@ -1,7 +1,7 @@
 {
   "symbol": "VNQ",
   "fill_price": 97.2735,
-  "highest_price": 98.4,
+  "highest_price": 99.09,
   "stop_price": 87.55,
   "stop_order_id": "acc9016e-1d34-4757-974b-019986994789",
   "whole_qty": 20,
@@ -10,5 +10,5 @@
   "ladder_fired": false,
   "ladder_order_id": null,
   "ladder_filled": false,
-  "position_closed": false
+  "position_closed": true
 }
