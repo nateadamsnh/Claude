@@ -103,6 +103,17 @@ SUMMARY_TIME    = time(15, 50)  # Start logging daily summary after this time
 SHORT_PUT_BP_FACTOR = 2.0       # Options buying power reserved per short put,
                                 # as a multiple of nominal collateral (strike*100)
 
+# Per-symbol falling-knife guard. The SPY-based regime detector is blind to a
+# basket-specific selloff — a name can crater while SPY holds up (e.g. the
+# 2026-06 IONQ/DKNG drop while SPY sat +6% above its 200-day SMA). Before
+# selling a NEW CSP, pause the symbol if it has fallen more than
+# SYMBOL_PAUSE_DROP_PCT below its recent SYMBOL_PAUSE_LOOKBACK-day high, so the
+# wheel doesn't keep selling puts into one name's downdraft. Fails OPEN: if the
+# bar data can't be fetched, no pause is applied (a data hiccup never silently
+# halts the wheel).
+SYMBOL_PAUSE_DROP_PCT = 0.25    # pause new CSPs when >25% below the recent high
+SYMBOL_PAUSE_LOOKBACK = 10      # trading days used to find that recent high
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # State helpers
@@ -181,6 +192,47 @@ def get_latest_stock_price(symbol: str) -> float:
                      headers=HEADERS, timeout=10)
     r.raise_for_status()
     return float(r.json()["trade"]["p"])
+
+def symbol_drawdown(symbol: str, current_price: float,
+                    lookback: int = SYMBOL_PAUSE_LOOKBACK) -> dict | None:
+    """Drawdown of `symbol` from its `lookback`-day high down to the LIVE price.
+
+    The recent high comes from daily bars, but "current" is the live trade price
+    passed in by the caller — the daily-bar close on the IEX feed can lag the
+    real price intraday, which would understate a fast drop. Returns
+    {high, current, drop_pct} or None when bar data is unavailable; callers must
+    treat None as "no pause" (fail open) so a data outage can't silently halt
+    new CSP sales.
+    """
+    end   = date.today()
+    start = end - timedelta(days=lookback * 2 + 8)   # calendar pad for weekends/holidays
+    r = requests.get(
+        f"{DATA_URL}/v2/stocks/{symbol}/bars",
+        headers=HEADERS,
+        params={
+            "timeframe":  "1Day",
+            "start":      start.isoformat(),
+            "end":        end.isoformat(),
+            "limit":      lookback + 8,
+            "feed":       "iex",
+            "adjustment": "raw",
+        },
+        timeout=15,
+    )
+    if r.status_code != 200:
+        return None
+    bars = r.json().get("bars") or []   # key may be present but null on no data
+    if len(bars) < 3:                   # too little history to judge a drawdown
+        return None
+    recent = bars[-lookback:]
+    # Recent high spans the lookback bars AND the live price, so an intraday pop
+    # above the bar highs doesn't get mistaken for a drawdown.
+    high = max([float(b["h"]) for b in recent] + [current_price])
+    if high <= 0:
+        return None
+    return {"high": high, "current": current_price,
+            "drop_pct": (high - current_price) / high}
+
 
 def get_order(order_id: str) -> dict:
     r = requests.get(f"{BASE_URL}/orders/{order_id}", headers=HEADERS, timeout=10)
@@ -394,6 +446,24 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
             log.info(
                 f"  CAUTION regime — reducing from {NUM_CONTRACTS} to "
                 f"{contracts_to_sell} contracts."
+            )
+
+        # Per-symbol falling-knife guard — the SPY regime check above can't see
+        # a name-specific selloff. Fails open: None (no data) => no pause.
+        dd = symbol_drawdown(SYMBOL, current_price)
+        if dd and dd["drop_pct"] >= SYMBOL_PAUSE_DROP_PCT:
+            log.warning(
+                f"  {SYMBOL} is {dd['drop_pct']*100:.1f}% below its "
+                f"{SYMBOL_PAUSE_LOOKBACK}-day high (${dd['high']:.2f} -> "
+                f"${dd['current']:.2f}), past the {SYMBOL_PAUSE_DROP_PCT*100:.0f}% "
+                f"pause threshold — skipping new CSP to avoid selling into a "
+                f"falling knife. Existing positions are unaffected."
+            )
+            return
+        if dd:
+            log.info(
+                f"  {SYMBOL} {dd['drop_pct']*100:.1f}% below {SYMBOL_PAUSE_LOOKBACK}-day "
+                f"high (threshold {SYMBOL_PAUSE_DROP_PCT*100:.0f}%) — OK to sell."
             )
 
         target_strike = current_price * (1 - PUT_OTM_PCT)
