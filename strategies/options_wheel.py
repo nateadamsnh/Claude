@@ -148,12 +148,33 @@ def get_account() -> dict:
     return requests.get(f"{BASE_URL}/account", headers=HEADERS, timeout=10).json()
 
 def get_positions() -> dict:
-    """Returns {symbol: position_dict} for ALL positions (stocks + options)."""
+    """Returns {symbol: position_dict} for ALL positions (stocks + options).
+
+    Raises on a failed/malformed fetch instead of returning an empty dict, so
+    callers can SKIP the run rather than mistake a transient API error for "you
+    hold nothing" — the latter previously triggered false expired/assigned
+    transitions (e.g. the SOFI duplicate-CSP incident on 2026-06-23 at the open).
+    """
     r = requests.get(f"{BASE_URL}/positions", headers=HEADERS, timeout=10)
-    positions = r.json() if r.status_code == 200 else []
+    if r.status_code != 200:
+        raise RuntimeError(f"/positions returned HTTP {r.status_code}: {r.text[:200]}")
+    positions = r.json()
     if not isinstance(positions, list):
-        return {}
+        raise RuntimeError(f"/positions returned non-list payload: {str(positions)[:200]}")
     return {p["symbol"]: p for p in positions}
+
+
+def contract_expiration(contract_symbol: str) -> date | None:
+    """Parse the expiration date out of an OCC option symbol, e.g.
+    'SOFI260710P00015500' -> date(2026, 7, 10). Returns None if unparseable."""
+    m = re.match(r"^[A-Z]+(\d{2})(\d{2})(\d{2})[CP]\d{8}$", contract_symbol)
+    if not m:
+        return None
+    yy, mm, dd = (int(g) for g in m.groups())
+    try:
+        return date(2000 + yy, mm, dd)
+    except ValueError:
+        return None
 
 def get_latest_stock_price(symbol: str) -> float:
     r = requests.get(f"{DATA_URL}/v2/stocks/{symbol}/trades/latest",
@@ -470,6 +491,20 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         else:
+            # Sanity guard: a short put that is no longer in positions but has
+            # NOT reached expiration and produced NO shares cannot truly have
+            # "expired worthless." This means the positions snapshot was stale
+            # or incomplete (seen at the 09:30 open). Hold state and retry rather
+            # than book a phantom expiry and sell a duplicate CSP next run.
+            exp = contract_expiration(contract_symbol)
+            if exp and date.today() < exp:
+                log.warning(
+                    f"  {contract_symbol} missing from positions but expires {exp} "
+                    f"({(exp - date.today()).days} DTE) with no shares held — "
+                    f"treating as a stale/incomplete positions response, NOT expiry. "
+                    f"Holding state, will recheck next run."
+                )
+                return
             # EXPIRED WORTHLESS
             total_kept = state["premium_sold"] * 100 * (state.get("active_qty") or NUM_CONTRACTS)
             log.info(
@@ -632,6 +667,18 @@ def run_cc(state: dict, positions: dict, account: dict):
             state["order_filled"]    = False
             state["cycle_count"]    += 1
         else:
+            # Sanity guard: shares are still held but the short call vanished
+            # before its expiration. A covered call can't expire while you keep
+            # the shares — this is a stale/incomplete snapshot, not an expiry.
+            exp = contract_expiration(contract_symbol)
+            if exp and date.today() < exp:
+                log.warning(
+                    f"  {contract_symbol} missing from positions but expires {exp} "
+                    f"({(exp - date.today()).days} DTE) while shares still held — "
+                    f"treating as a stale/incomplete positions response, NOT expiry. "
+                    f"Holding state, will recheck next run."
+                )
+                return
             # EXPIRED WORTHLESS
             total_kept = state["premium_sold"] * 100 * (state.get("active_qty") or NUM_CONTRACTS)
             log.info(
@@ -742,7 +789,14 @@ def process_symbol(cash_budget: float):
     """Run one wheel iteration for the current SYMBOL/STATE_FILE context."""
     state     = load_state()
     account   = get_account()       # re-fetched per symbol so cash reflects
-    positions = get_positions()     # collateral already reserved by earlier symbols
+    try:
+        positions = get_positions() # collateral already reserved by earlier symbols
+    except Exception as e:
+        log.error(
+            f"  {SYMBOL}: positions fetch failed ({e}) — skipping this run to "
+            f"avoid acting on incomplete data (no false expiry/assignment)."
+        )
+        return
 
     try:
         if state["stage"] == "CSP":
