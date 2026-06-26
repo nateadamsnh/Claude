@@ -1,0 +1,7 @@
+{
+  "_comment": "Hard backstop limits for the wheel, enforced in code independently of strategy logic. Edit values to taste; unknown keys are ignored and missing keys fall back to wheel_safety.DEFAULT_LIMITS.",
+  "max_contracts_per_symbol": 5,
+  "max_notional_per_symbol": 15000.0,
+  "min_premium_per_contract": 0.05,
+  "max_daily_loss_pct": 0.10
+}
