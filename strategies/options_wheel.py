@@ -124,6 +124,7 @@ def load_state() -> dict:
         "stage":             "CSP",  # "CSP" or "CC"
         "active_contract":   None,   # OCC symbol of open short option
         "active_order_id":   None,   # order ID of the sell-to-open
+        "closing_order_id":  None,   # order ID of a pending buy-to-close (profit target)
         "active_qty":        0,      # number of contracts in the open position
         "order_filled":      False,  # True once the STO order confirms filled
         "premium_sold":      0.0,    # credit per share received (fill price)
@@ -540,6 +541,49 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
             log.info(f"  CSP sell order status: {status} — waiting for fill")
         return
 
+    # ── Pending early close: wait for the buy-to-close to actually fill ────────
+    # A profit-target BTC is a day limit order and often does NOT fill. Resolve
+    # it here BEFORE the position check so a filled close is booked correctly and
+    # an unfilled one leaves the position tracked (instead of orphaning it and
+    # selling a duplicate CSP next run).
+    if state.get("closing_order_id"):
+        order  = get_order(state["closing_order_id"])
+        status = order.get("status", "unknown")
+        if status == "filled":
+            close_px = float(order.get("filled_avg_price") or 0)
+            qty      = state.get("active_qty") or NUM_CONTRACTS
+            cost     = close_px * 100 * qty
+            state["total_premium"] -= cost
+            state["premium_history"].append({
+                "date":     str(date.today()),
+                "type":     "CSP-BTC",
+                "contract": state["active_contract"],
+                "premium":  -close_px,
+                "total":    round(-cost, 2),
+                "note":     "buy to close at profit target",
+            })
+            log.info(
+                f"  CSP closed early @ ${close_px:.2f}/sh x{qty} (-${cost:.2f}) | "
+                f"Net premium now: ${state['total_premium']:,.2f}. Selling new CSP next check."
+            )
+            state["active_contract"]  = None
+            state["active_order_id"]  = None
+            state["closing_order_id"] = None
+            state["active_qty"]       = 0
+            state["order_filled"]     = False
+            state["cycle_count"]     += 1
+            save_state(state)
+        elif status in ("canceled", "expired", "rejected"):
+            log.warning(
+                f"  CSP buy-to-close {status} (did not fill) — position is still open. "
+                f"Clearing close flag; will re-check the profit target next run."
+            )
+            state["closing_order_id"] = None
+            save_state(state)
+        else:
+            log.info(f"  CSP buy-to-close status: {status} — waiting for fill")
+        return
+
     # ── Filled: check if still in position ───────────────────────────────────
     contract_symbol = state["active_contract"]
     if contract_symbol not in positions:
@@ -613,10 +657,10 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
         btc = buy_to_close(contract_symbol, current_mid, "CSP-BTC",
                            qty=state.get("active_qty") or NUM_CONTRACTS)
         if btc.get("id"):
-            state["active_contract"] = None
-            state["active_order_id"] = None
-            state["active_qty"]      = 0
-            state["order_filled"]    = False
+            # Record the close order but keep the position tracked — the BTC may
+            # not fill. The pending-close block above finalizes it once filled,
+            # and re-tries if it expires unfilled.
+            state["closing_order_id"] = btc["id"]
             save_state(state)
     else:
         log.info(
@@ -719,6 +763,47 @@ def run_cc(state: dict, positions: dict, account: dict):
             log.info(f"  CC sell order status: {status} — waiting for fill")
         return
 
+    # ── Pending early close: wait for the buy-to-close to actually fill ────────
+    # Same protection as the CSP stage: a profit-target BTC may not fill, so
+    # resolve it before the position check rather than clearing state on submit.
+    if state.get("closing_order_id"):
+        order  = get_order(state["closing_order_id"])
+        status = order.get("status", "unknown")
+        if status == "filled":
+            close_px = float(order.get("filled_avg_price") or 0)
+            qty      = state.get("active_qty") or NUM_CONTRACTS
+            cost     = close_px * 100 * qty
+            state["total_premium"] -= cost
+            state["premium_history"].append({
+                "date":     str(date.today()),
+                "type":     "CC-BTC",
+                "contract": state["active_contract"],
+                "premium":  -close_px,
+                "total":    round(-cost, 2),
+                "note":     "buy to close at profit target",
+            })
+            log.info(
+                f"  CC closed early @ ${close_px:.2f}/sh x{qty} (-${cost:.2f}) | "
+                f"Net premium now: ${state['total_premium']:,.2f}. Selling new CC next check."
+            )
+            state["active_contract"]  = None
+            state["active_order_id"]  = None
+            state["closing_order_id"] = None
+            state["active_qty"]       = 0
+            state["order_filled"]     = False
+            # Still holding the shares — stay in the CC stage and sell a new call.
+            save_state(state)
+        elif status in ("canceled", "expired", "rejected"):
+            log.warning(
+                f"  CC buy-to-close {status} (did not fill) — call is still open. "
+                f"Clearing close flag; will re-check the profit target next run."
+            )
+            state["closing_order_id"] = None
+            save_state(state)
+        else:
+            log.info(f"  CC buy-to-close status: {status} — waiting for fill")
+        return
+
     # ── Filled: check if still in position ───────────────────────────────────
     contract_symbol = state["active_contract"]
     if contract_symbol not in positions:
@@ -787,10 +872,9 @@ def run_cc(state: dict, positions: dict, account: dict):
         btc = buy_to_close(contract_symbol, current_mid, "CC-BTC",
                            qty=state.get("active_qty") or NUM_CONTRACTS)
         if btc.get("id"):
-            state["active_contract"] = None
-            state["active_order_id"] = None
-            state["active_qty"]      = 0
-            state["order_filled"]    = False
+            # Record the close order but keep the call tracked — the BTC may not
+            # fill. The pending-close block above finalizes it once filled.
+            state["closing_order_id"] = btc["id"]
             save_state(state)
     else:
         log.info(
