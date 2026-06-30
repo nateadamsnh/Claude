@@ -23,7 +23,7 @@ Scheduled daily 6:45 PM Mon-Fri (after all other strategies have run).
 import json
 import subprocess
 import sys
-from datetime import datetime, date, timedelta
+from datetime import datetime
 from math import floor
 from pathlib import Path
 
@@ -66,7 +66,6 @@ EXPECTED_TASKS = {
     # PortfolioMonitor and StrategyManager are intentionally DISABLED (would place
     # stops that conflict with the wheel's covered calls). Re-add here if re-enabled.
     "\\Alpaca\\WheelStrategy":             4,
-    "\\Alpaca\\StrategyManager":           4,
     "\\Alpaca\\WheelCandidateScan":        8,
     "\\Alpaca\\WheelCandidateEmail":       8,
     "\\Alpaca\\Signals\\ActivistMonitor":  4,
@@ -157,19 +156,6 @@ def check_stop_coverage() -> list:
 def check_state_vs_reality() -> list:
     """Strategy state files must match actual Alpaca activity."""
     problems = []
-    cutoff = (date.today() - timedelta(days=3)).isoformat()
-
-    # Govt contracts: recent trades must have order IDs (the original bug)
-    try:
-        gc = json.load(open(BASE_DIR / "strategies" / "govt_contracts_state.json"))
-        for aid, t in gc.get("traded_tickers", {}).items():
-            if t.get("traded_date", "") >= cutoff:
-                if not t.get("order_id") and "pre-fix" not in str(t.get("order_status", "")):
-                    problems.append(f"Govt contracts: {t['ticker']} trade on {t['traded_date']} "
-                                    f"has NO order ID (status: {t.get('order_status')})")
-    except Exception as e:
-        problems.append(f"Could not read govt contracts state: {e}")
-
     # Copy trader: pending queue shouldn't grow stale
     try:
         cp = json.load(open(BASE_DIR / "politician-copy-trader" / "state.json"))
@@ -188,9 +174,7 @@ def check_freshness() -> list:
     now = datetime.now()
     # Only meaningful Mon-Fri after market hours; allow 4 days for weekends/holidays
     targets = {
-        "strategy_manager log": BASE_DIR / "logs" / "strategy_manager.log",
         "wheel log":            BASE_DIR / "logs" / "wheel.log",
-        "momentum log":         BASE_DIR / "logs" / "momentum_strategy.log",
         "regime state":         BASE_DIR / "strategies" / "regime_state.json",
     }
     for label, path in targets.items():
