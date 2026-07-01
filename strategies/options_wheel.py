@@ -999,6 +999,55 @@ def process_symbol(cash_budget: float):
         )
         return
 
+    # ── Pre-reconcile: resolve any pending buy-to-close BEFORE reconciling ──────
+    # closing_order_id fill-handling normally lives inside run_csp/run_cc, but
+    # the reconcile check below would halt first when a BTC fills and the
+    # position vanishes from the broker (state still shows it as active). Book
+    # the fill here so reconcile sees clean state on the same run.
+    if state.get("closing_order_id"):
+        _order  = get_order(state["closing_order_id"])
+        _status = _order.get("status", "unknown")
+        _stage  = state.get("stage", "CSP")
+        if _status == "filled":
+            _close_px = float(_order.get("filled_avg_price") or 0)
+            _qty      = state.get("active_qty") or NUM_CONTRACTS
+            _cost     = _close_px * 100 * _qty
+            _btc_type = "CSP-BTC" if _stage == "CSP" else "CC-BTC"
+            state["total_premium"] -= _cost
+            state["premium_history"].append({
+                "date":     str(date.today()),
+                "type":     _btc_type,
+                "contract": state["active_contract"],
+                "premium":  -_close_px,
+                "total":    round(-_cost, 2),
+                "note":     "buy to close at profit target",
+            })
+            log.info(
+                f"  {_btc_type} confirmed (pre-reconcile): {state['active_contract']} "
+                f"@ ${_close_px:.2f} x{_qty} (-${_cost:.2f}) | "
+                f"Net premium: ${state['total_premium']:,.2f}. Selling new contract next check."
+            )
+            state["active_contract"]  = None
+            state["active_order_id"]  = None
+            state["closing_order_id"] = None
+            state["active_qty"]       = 0
+            state["order_filled"]     = False
+            if _stage == "CSP":
+                state["cycle_count"] += 1
+            save_state(state)
+            return  # state is clean; look for next trade on the following run
+        elif _status in ("canceled", "expired", "rejected"):
+            log.warning(
+                f"  BTC order {_status} (pre-reconcile) — position may still be open. "
+                f"Clearing close flag; reconcile will verify."
+            )
+            state["closing_order_id"] = None
+            save_state(state)
+            # fall through to reconcile — it will confirm the position status
+        else:
+            log.info(f"  BTC pending ({_status}) — waiting for fill, skipping this run.")
+            return
+
     # ── Reconcile local state against the broker before acting ────────────────
     # The root cause of every bug found so far is acting on state that doesn't
     # match reality. Surface untracked positions, and HALT the symbol on a true
