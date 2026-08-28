@@ -38,6 +38,7 @@ without feed=indicative. All quote lookups go through get_chain() with the
 indicative feed — this was the real cause of the chronic "no real bid" skips.
 """
 
+import os
 import json
 import re
 import sys
@@ -46,6 +47,7 @@ import logging
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from regime_detector import get_regime, regime_contracts_multiplier
+import wheel_safety
 
 # ── Strategy Symbols ──────────────────────────────────────────────────────────
 # The wheel runs independently on each symbol; every symbol keeps its own state
@@ -113,6 +115,21 @@ SHORT_PUT_BP_FACTOR = 2.0       # Options buying power reserved per short put,
 # halts the wheel).
 SYMBOL_PAUSE_DROP_PCT = 0.25    # pause new CSPs when >25% below the recent high
 SYMBOL_PAUSE_LOOKBACK = 10      # trading days used to find that recent high
+
+# ── Safety layer (reconciliation, hard limits, kill-switch, dry-run) ──────────
+# Money-proportional backstops live in config/wheel_limits.json (falls back to
+# wheel_safety.DEFAULT_LIMITS). See wheel_safety.py for the pure, tested logic.
+LIMITS_FILE = BASE_DIR / "config" / "wheel_limits.json"
+LIMITS      = wheel_safety.load_limits(LIMITS_FILE)
+
+# Dry-run / alert-only mode: when on, order placement logs what it WOULD do and
+# places NOTHING. Toggle with the WHEEL_DRY_RUN env var (1/true/yes/on). Default
+# off preserves live behavior.
+DRY_RUN = os.environ.get("WHEEL_DRY_RUN", "").strip().lower() in ("1", "true", "yes", "on")
+
+# Set once per run() by the daily-loss kill-switch. Blocks NEW entries only —
+# existing positions are still managed/closed.
+BLOCK_NEW_ENTRIES = False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -365,6 +382,12 @@ def find_call_contract(cost_basis: float) -> dict | None:
 
 def sell_to_open(contract: dict, label: str, qty: int = NUM_CONTRACTS) -> dict:
     """Sell `qty` contracts at mid-price limit (credit trade)."""
+    if DRY_RUN:
+        log.warning(
+            f"  [DRY-RUN] WOULD {label} {contract['symbol']} x{qty} @ "
+            f"${contract['mid']:.2f}/sh (${contract['mid']*100*qty:.2f} credit) — no order placed"
+        )
+        return {"dry_run": True}   # no 'id' => callers won't mutate state
     payload = {
         "symbol":        contract["symbol"],
         "qty":           str(qty),
@@ -390,6 +413,12 @@ def sell_to_open(contract: dict, label: str, qty: int = NUM_CONTRACTS) -> dict:
 
 def buy_to_close(contract_symbol: str, limit_price: float, label: str, qty: int) -> dict:
     """Buy `qty` contracts to close at limit price."""
+    if DRY_RUN:
+        log.warning(
+            f"  [DRY-RUN] WOULD {label} close {contract_symbol} x{qty} @ "
+            f"${limit_price:.2f}/sh — no order placed"
+        )
+        return {"dry_run": True}   # no 'id' => callers won't mutate state
     payload = {
         "symbol":        contract_symbol,
         "qty":           str(qty),
@@ -426,6 +455,9 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
 
     # ── No active contract: check regime then sell new puts ──────────────────
     if not state["active_contract"]:
+        if BLOCK_NEW_ENTRIES:
+            log.warning(f"  {SYMBOL}: new entries blocked (daily-loss kill-switch) — not selling a new CSP.")
+            return
         # Regime check — pause in bear markets
         regime_data = get_regime(verbose=False)
         regime      = regime_data["regime"]
@@ -493,6 +525,12 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
         contract = find_put_contract(current_price)
         if not contract:
             log.warning("  No suitable put found. Will retry next check.")
+            return
+
+        lc = wheel_safety.check_entry_limits(
+            SYMBOL, contract["strike"], contracts_to_sell, contract["mid"], LIMITS)
+        if not lc.allowed:
+            log.error(f"  ⛔ LIMIT BLOCK (CSP): {lc.reason} — not selling.")
             return
 
         log.info(
@@ -699,6 +737,9 @@ def run_cc(state: dict, positions: dict, account: dict):
 
     # ── No active contract: sell covered calls ────────────────────────────────
     if not state["active_contract"]:
+        if BLOCK_NEW_ENTRIES:
+            log.warning(f"  {SYMBOL}: new entries blocked (daily-loss kill-switch) — not selling a new CC.")
+            return
         contract = find_call_contract(cost_basis)
         if not contract:
             log.warning("  No suitable call found. Will retry next check.")
@@ -714,6 +755,12 @@ def run_cc(state: dict, positions: dict, account: dict):
         cc_qty = int(shares_held // 100)
         if cc_qty < 1:
             log.warning(f"  Only {shares_held} shares held — fewer than 100, can't sell a covered call.")
+            return
+
+        lc = wheel_safety.check_entry_limits(
+            SYMBOL, contract["strike"], cc_qty, contract["mid"], LIMITS)
+        if not lc.allowed:
+            log.error(f"  ⛔ LIMIT BLOCK (CC): {lc.reason} — not selling.")
             return
 
         log.info(
@@ -952,6 +999,71 @@ def process_symbol(cash_budget: float):
         )
         return
 
+    # ── Pre-reconcile: resolve any pending buy-to-close BEFORE reconciling ──────
+    # closing_order_id fill-handling normally lives inside run_csp/run_cc, but
+    # the reconcile check below would halt first when a BTC fills and the
+    # position vanishes from the broker (state still shows it as active). Book
+    # the fill here so reconcile sees clean state on the same run.
+    if state.get("closing_order_id"):
+        _order  = get_order(state["closing_order_id"])
+        _status = _order.get("status", "unknown")
+        _stage  = state.get("stage", "CSP")
+        if _status == "filled":
+            _close_px = float(_order.get("filled_avg_price") or 0)
+            _qty      = state.get("active_qty") or NUM_CONTRACTS
+            _cost     = _close_px * 100 * _qty
+            _btc_type = "CSP-BTC" if _stage == "CSP" else "CC-BTC"
+            state["total_premium"] -= _cost
+            state["premium_history"].append({
+                "date":     str(date.today()),
+                "type":     _btc_type,
+                "contract": state["active_contract"],
+                "premium":  -_close_px,
+                "total":    round(-_cost, 2),
+                "note":     "buy to close at profit target",
+            })
+            log.info(
+                f"  {_btc_type} confirmed (pre-reconcile): {state['active_contract']} "
+                f"@ ${_close_px:.2f} x{_qty} (-${_cost:.2f}) | "
+                f"Net premium: ${state['total_premium']:,.2f}. Selling new contract next check."
+            )
+            state["active_contract"]  = None
+            state["active_order_id"]  = None
+            state["closing_order_id"] = None
+            state["active_qty"]       = 0
+            state["order_filled"]     = False
+            if _stage == "CSP":
+                state["cycle_count"] += 1
+            save_state(state)
+            return  # state is clean; look for next trade on the following run
+        elif _status in ("canceled", "expired", "rejected"):
+            log.warning(
+                f"  BTC order {_status} (pre-reconcile) — position may still be open. "
+                f"Clearing close flag; reconcile will verify."
+            )
+            state["closing_order_id"] = None
+            save_state(state)
+            # fall through to reconcile — it will confirm the position status
+        else:
+            log.info(f"  BTC pending ({_status}) — waiting for fill, skipping this run.")
+            return
+
+    # ── Reconcile local state against the broker before acting ────────────────
+    # The root cause of every bug found so far is acting on state that doesn't
+    # match reality. Surface untracked positions, and HALT the symbol on a true
+    # divergence rather than trading on bad state.
+    recon = wheel_safety.reconcile_symbol(SYMBOL, state, positions)
+    for u in recon.untracked:
+        log.warning(f"  ⚠ RECONCILE: broker holds untracked {SYMBOL} short {u} (not managed by state).")
+    if not recon.ok:
+        for v in recon.violations:
+            log.error(f"  ⛔ RECONCILE HALT: {v}")
+        log.error(
+            f"  {SYMBOL}: state/broker mismatch — skipping this symbol to avoid "
+            f"acting on bad state. Manual reconciliation required."
+        )
+        return
+
     try:
         if state["stage"] == "CSP":
             run_csp(state, positions, account, cash_budget)
@@ -968,15 +1080,32 @@ def process_symbol(cash_budget: float):
 
 
 def run():
-    global SYMBOL, STATE_FILE
+    global SYMBOL, STATE_FILE, BLOCK_NEW_ENTRIES
     log.info("=" * 65)
     log.info(f"WHEEL STRATEGY ({', '.join(SYMBOLS)})  |  "
              f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if DRY_RUN:
+        log.warning("DRY-RUN MODE: no orders will be placed; actions are logged as 'WOULD ...'.")
     log.info("=" * 65)
 
     if not market_is_open():
         log.info("Market is closed. No action taken.")
         return
+
+    # ── Daily-loss kill-switch — blocks NEW entries account-wide for this run ──
+    BLOCK_NEW_ENTRIES = False
+    try:
+        acct0 = get_account()
+        kill  = wheel_safety.daily_loss_halt(
+            float(acct0.get("equity", 0)), float(acct0.get("last_equity", 0)), LIMITS)
+        if not kill.allowed:
+            BLOCK_NEW_ENTRIES = True
+            log.error(
+                f"  ⛔ KILL-SWITCH: {kill.reason}. Existing positions will still be "
+                f"managed/closed, but NO new CSP/CC will be opened this run."
+            )
+    except Exception as e:
+        log.error(f"  Kill-switch check failed ({e}) — proceeding without it (fail open).")
 
     # Budget each symbol a fair share of the LIVE options buying power — not
     # cash. Alpaca reserves options_buying_power (~half of cash here) as each
