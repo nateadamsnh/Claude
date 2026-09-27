@@ -77,6 +77,7 @@ def scrape_senator_trades(senator_id: str) -> list:
             "Accept": "text/html"
         })
         if r.status_code != 200:
+            log.error(f"Capitol Trades returned HTTP {r.status_code} for senator {senator_id}")
             return []
 
         trades = []
@@ -111,26 +112,33 @@ def scrape_senator_trades(senator_id: str) -> list:
             except Exception:
                 pass
 
-        # HTML table fallback
-        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL)
-        for row in rows:
+        # HTML table fallback: read the row's visible text, not its markup
+        for row in re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL):
             ticker_match = TICKER_RE.search(row)
             if not ticker_match:
                 continue
             ticker = ticker_match.group(1).replace("/", ".").upper()
-            row_lower = row.lower()
-            if "buy" in row_lower or "purchase" in row_lower:
-                tx_type = "BUY"
-            elif "sell" in row_lower or "sale" in row_lower:
-                tx_type = "SELL"
-            else:
+            tokens = [t.strip() for t in re.sub(r'<[^>]+>', '\n', row).split('\n') if t.strip()]
+            text = " ".join(tokens)
+            type_m = re.search(r'\b(buy|sell)\b', text, re.IGNORECASE)
+            if not type_m:
                 continue
+            tx_type = type_m.group(1).upper()
+            # Row shows "<published d Mon yyyy> <traded d Mon yyyy>"; the second is the trade date
+            dates = re.findall(r'\b(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})\b', text)
+            tx_date = "-".join(dates[1]) if len(dates) > 1 else ""
+            size_m = re.search(r'\b\d+[KM]?[–-]\d+[KM]\b', text)
+            issuer = ticker
+            for i, tok in enumerate(tokens):
+                if TICKER_RE.fullmatch(tok) and i > 0:
+                    issuer = tokens[i - 1]
+                    break
             trades.append({
                 "ticker":  ticker,
                 "tx_type": tx_type,
-                "tx_date": "",
-                "size":    "",
-                "issuer":  ticker,
+                "tx_date": tx_date,
+                "size":    size_m.group(0) if size_m else "",
+                "issuer":  issuer,
             })
         return trades
 
@@ -145,7 +153,20 @@ def should_skip(ticker: str, issuer: str) -> bool:
 
 
 def execute_trade(ticker: str, side: str) -> dict:
-    """Place a notional trade on Alpaca."""
+    """Place a $500 notional buy, or close the held position on a sell (never opens a short)."""
+    if side.lower() == "sell":
+        try:
+            pos = requests.get(f"{BASE_URL}/positions/{ticker}", headers=HEADERS, timeout=10)
+            if pos.status_code == 404:
+                return {"status": "skipped (no position)"}
+            pos.raise_for_status()
+            qty = pos.json()["qty"]
+            r = requests.post(f"{BASE_URL}/orders", headers=HEADERS, timeout=10, json={
+                "symbol": ticker, "qty": qty, "side": "sell",
+                "type": "market", "time_in_force": "day"})
+            return r.json()
+        except Exception as e:
+            return {"error": str(e)}
     payload = {
         "symbol":        ticker,
         "notional":      str(TRADE_AMOUNT),
@@ -160,7 +181,7 @@ def execute_trade(ticker: str, side: str) -> dict:
         return {"error": str(e)}
 
 
-def run():
+def run(baseline: bool = False):
     log.info("=" * 65)
     log.info(f"SENATE DISCLOSURES  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info("=" * 65)
@@ -196,6 +217,14 @@ def run():
                 seen_keys.add(key)
                 continue
 
+            if baseline:
+                seen_keys.add(key)
+                continue
+            if not market_open:
+                # Leave it unseen so the next in-hours run trades it, instead of dropping it
+                log.info(f"    [DEFER] {ticker} {tx_type} — {name} | market closed, retry next run")
+                continue
+
             seen_keys.add(key)
             side = "buy" if tx_type == "BUY" else "sell"
 
@@ -220,8 +249,13 @@ def run():
     state["last_run"]  = datetime.now().isoformat()
     save_state("senate_disclosures.json", state)
 
+    if baseline:
+        log.info(f"  Baseline: marked {len(seen_keys)} current disclosures as seen, no orders placed.")
+        log.info("Run complete.\n")
+        return
     if not new_trades:
         log.info("  No new senator trades found.")
+        log.info("Run complete.\n")
         return
 
     rows = [[
@@ -250,4 +284,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    run(baseline="--baseline" in sys.argv)

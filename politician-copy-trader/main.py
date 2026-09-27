@@ -287,7 +287,7 @@ def run():
         check_gain_notifications(state)
         save_state(state)
 
-    log.info("\nRun complete.\n")
+    log.info("Run complete.\n")
 
 
 if __name__ == "__main__":

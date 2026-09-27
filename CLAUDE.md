@@ -29,7 +29,9 @@
 
 ## Politician Copy Trader Bot
 
-**Status: DISCONTINUED 2026-06-11** — removed at Nathaniel's request after flat performance (~-$30 net on ~$10K cycled through 24 trades). All 16 copy-trade positions liquidated at the 2026-06-12 open, "PoliticianCopyTrader" Task Scheduler task deleted. Code and state.json kept for records. The separate `signals/senate_disclosures.py` senator copy monitor was ALSO discontinued the same day (12 positions ~$3,893 liquidated, "SenateDisclosures" task deleted) — all congressional copy-trading is now shut down.
+**Status: RE-ENABLED 2026-09-26** at Nathaniel's request (paper account). `\Alpaca\PoliticianCopyTrader` (hourly Mon-Fri 9:30-18:00) and `\Alpaca\SenateDisclosures` (every 2h, same window) recreated via `scripts\register_copy_trader_tasks.ps1`; first runs 2026-09-28 9:30 AM. `signals\senate_disclosures.py` moved back out of `archive\`. Both are in the Heartbeat `JOBS`. Senate script fixes made on re-enable: the scraper now parses real trade dates/sizes (before, blank dates collapsed dedup keys); sells only close a held position (before, a sell with no position could open a short); trades seen while the market is closed are deferred, not dropped; non-200 responses now log an error; baseline seeded 2026-09-26 (82 existing disclosures marked seen, so no backlog is traded). Rounds and Hoeven legitimately show 0 trades on Capitol Trades. History below is from the first run.
+
+**Previously DISCONTINUED 2026-06-11** — removed at Nathaniel's request after flat performance (~-$30 net on ~$10K cycled through 24 trades). All 16 copy-trade positions liquidated at the 2026-06-12 open, "PoliticianCopyTrader" Task Scheduler task deleted. Code and state.json kept for records. The separate `signals/senate_disclosures.py` senator copy monitor was ALSO discontinued the same day (12 positions ~$3,893 liquidated, "SenateDisclosures" task deleted) — all congressional copy-trading is now shut down.
 
 **Location:** `C:\Users\Nathaniel\Documents\Trading\politician-copy-trader\`
 
