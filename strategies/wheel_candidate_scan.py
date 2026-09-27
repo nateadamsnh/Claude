@@ -4,6 +4,22 @@ Wheel Candidate Scanner
 =======================
 Scans live options quotes for potential wheel strategy candidates.
 Runs once at market open, saves results to logs/wheel_candidate_scan.log
+
+Fixed 2026-09-27: the per-contract snapshot query (?symbols=<occ>) returns
+empty quotes (bid/ask None) on this data tier, and the chain is empty
+without feed=indicative -- every quote lookup here was silently getting
+bid=0 and getting skipped as "no liquid puts found". This is the same bug
+documented and fixed in options_wheel.py's get_chain() on 2026-06-22; this
+script was never updated to match. Now pulls the whole per-underlying chain
+with feed=indicative once per symbol (get_chain()) instead of one request
+per contract, and applies the same spread <=25% liquidity filter the live
+wheel uses so a wide, illiquid quote can't win "best" just because it has
+a nonzero bid.
+
+Candidate universe widened 2026-09-27 from the original 7 (UBER, F, SMCI,
+DKNG, SOFI, RIVN, MARA) to include other liquid, moderately-priced, high-IV
+names in the same risk band -- this is what actually found SMCI/INTC/CVNA/
+HOOD as good candidates when screened by hand that day.
 """
 
 import json
@@ -39,13 +55,40 @@ HEADERS  = {
     "APCA-API-SECRET-KEY": creds["api_secret"],
 }
 
-CANDIDATES = ["UBER", "F", "SMCI", "DKNG", "SOFI", "RIVN", "MARA"]
-DTE_MIN    = 14
-DTE_MAX    = 35
+CANDIDATES = [
+    "UBER", "F", "SMCI", "DKNG", "SOFI", "RIVN", "MARA",
+    "IONQ", "PLTR", "COIN", "HOOD", "AFRM", "CVNA", "NIO",
+    "LCID", "PINS", "SNAP", "UPST", "INTC", "BAC", "PFE",
+    "T", "WBD", "RIOT", "CLSK",
+]
+DTE_MIN     = 14
+DTE_MAX     = 35
+MAX_SPREAD_PCT = 25.0   # matches the live wheel's liquidity filter
 
 def market_is_open():
     r = requests.get(f"{BASE_URL}/clock", headers=HEADERS, timeout=10)
     return r.json().get("is_open", False)
+
+def get_chain(underlying: str, option_type: str = "put") -> dict:
+    """Bulk-fetch every snapshot for one underlying + option type using the
+    indicative feed. Returns {occ_symbol: snapshot}. See module docstring --
+    the per-contract query returns empty quotes on this data tier."""
+    out = {}
+    token = None
+    while True:
+        params = {"feed": "indicative", "type": option_type, "limit": 1000}
+        if token:
+            params["page_token"] = token
+        r = requests.get(f"{DATA_URL}/v1beta1/options/snapshots/{underlying}",
+                          headers=HEADERS, params=params, timeout=20)
+        if r.status_code != 200:
+            break
+        j = r.json()
+        out.update(j.get("snapshots", {}))
+        token = j.get("next_page_token")
+        if not token:
+            break
+    return out
 
 def scan():
     if not market_is_open():
@@ -78,24 +121,27 @@ def scan():
             }, timeout=10)
             contracts = r2.json().get("option_contracts", [])
 
+            chain = get_chain(sym, "put")
+
             best = None
             best_dist = 999
             for c in contracts:
                 strike = float(c["strike_price"])
-                snap   = requests.get(
-                    f"{DATA_URL}/v1beta1/options/snapshots/{sym}",
-                    headers=HEADERS, params={"symbols": c["symbol"]}, timeout=10
-                ).json()
-                quote = snap.get("snapshots", {}).get(c["symbol"], {}).get("latestQuote", {})
-                bid = quote.get("bp", 0)
-                ask = quote.get("ap", 0)
-                if bid <= 0:
+                snap   = chain.get(c["symbol"], {})
+                quote  = snap.get("latestQuote", {})
+                bid    = quote.get("bp") or 0
+                ask    = quote.get("ap") or 0
+                if bid <= 0 or ask <= 0:
                     continue
-                mid  = round((bid + ask) / 2, 2)
+                mid = (bid + ask) / 2
+                spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 else 999
+                if spread_pct > MAX_SPREAD_PCT:
+                    continue
                 dte  = (date.fromisoformat(c["expiration_date"]) - today).days
                 dist = abs(strike - target)
                 if dist < best_dist:
                     best_dist = dist
+                    iv = snap.get("impliedVolatility")
                     best = {
                         "symbol":       sym,
                         "stock_price":  price,
@@ -105,10 +151,11 @@ def scan():
                         "dte":          dte,
                         "bid":          bid,
                         "ask":          ask,
-                        "mid":          mid,
-                        "spread_pct":   round((ask - bid) / mid * 100, 1) if mid > 0 else 999,
+                        "mid":          round(mid, 2),
+                        "spread_pct":   spread_pct,
                         "collateral":   round(strike * 100, 2),
                         "annual_yield": round((mid / strike) * (365 / dte) * 100, 1),
+                        "iv":           round(iv, 3) if iv else None,
                         "contract":     c["symbol"],
                     }
 
@@ -119,6 +166,7 @@ def scan():
                     f"strike=${best['strike']:>6.2f} ({best['otm_pct']:+.1f}%)  "
                     f"exp={best['expiration']} ({best['dte']}d)  "
                     f"mid=${best['mid']:.2f}  spread={best['spread_pct']:.0f}%  "
+                    f"IV={best['iv']}  "
                     f"collateral=${best['collateral']:,.0f}  "
                     f"annualized={best['annual_yield']}%"
                 )

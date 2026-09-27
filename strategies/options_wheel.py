@@ -58,7 +58,7 @@ STRATEGY_NAME = "wheel"
 # The wheel runs independently on each symbol; every symbol keeps its own state
 # file so their CSP/CC stages never interfere. Edit this list to change the
 # basket. Shared cash is split evenly across symbols (see run()).
-SYMBOLS = ["MARA", "SOFI", "IONQ", "DKNG"]
+SYMBOLS = ["MARA", "SOFI", "IONQ", "DKNG", "SMCI", "INTC", "CVNA", "HOOD"]
 
 # SYMBOL and STATE_FILE form the "current symbol" context, reassigned per symbol
 # inside run(). The per-symbol functions read these module globals.

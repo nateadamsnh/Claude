@@ -6,6 +6,11 @@ Politician Copy Trader — Multi-politician Orchestrator
 2. Scrapes Capitol Trades for each one's latest trades.
 3. Finds trades not yet seen, queues new tradeable ones.
 4. Executes queued trades when market is open (holds in pending otherwise).
+4b. Attaches a 10% trailing stop-loss to any held whole shares not already
+    covered by one -- see trader.attach_protective_stops(). Added 2026-09-27:
+    previously nothing managed downside between a copied buy and whatever
+    eventual sell disclosure told us to exit; the -10% "loss alert" below
+    only ever sent a notification, it never closed a position.
 5. Fires Windows desktop notifications on new trades and gain milestones.
 6. Persists all state to state.json.
 
@@ -281,6 +286,15 @@ def run():
             ]
             save_state(state)
             log.info(f"Executed: {len(executed_keys)} | Still pending: {len(state['pending_trades'])}")
+
+    # ── Step 4b: Attach protective stops ───────────────────────────────────────
+    # Runs every cycle regardless of whether Step 4 executed anything this run --
+    # it's a reconcile pass against live positions/orders, not tied to this
+    # run's own activity. See trader.attach_protective_stops() docstring.
+    if trader.is_market_open():
+        trader.attach_protective_stops()
+    else:
+        log.info("Market CLOSED — skipping stop-loss reconcile pass.")
 
     # ── Step 5: Check gain milestones ──────────────────────────────────────────
     if NOTIFY_ENABLED:

@@ -15,9 +15,28 @@ Tracked senators (finance, tech, defense, intelligence committees):
 Runs every 2 hours during market hours.
 Shares the copy trader's execution logic — places $500 trades
 for any new senator disclosures matching portfolio interest.
+
+Protective stop-loss added 2026-09-27 (mirrors the same fix in
+politician-copy-trader/trader.py -- see that module's docstring for the
+full rationale): nothing previously managed downside risk between a copied
+buy and whatever eventual disclosure told us to sell. attach_protective_stops()
+below places a 10% Alpaca-managed GTC trailing stop on any held whole shares
+not already covered by one, checked fresh against the broker's open orders
+every run (not local state, so it self-heals across runs). Only whole
+shares -- Alpaca's trailing_stop order type rejects fractional qty, and a
+$500 notional buy is almost always fractional, so a small remainder stays
+uncovered. execute_trade()'s sell path cancels any resting stop first, so
+a copied sell isn't blocked by shares the stop already reserves.
+
+These functions duplicate politician-copy-trader/trader.py's equivalents
+rather than importing them, matching this file's existing style (it
+already duplicates BASE_URL/HEADERS/SKIP_KEYWORDS/TRADE_AMOUNT instead of
+importing trader.py, despite the sys.path insert below making that
+possible) -- keeps the two scripts independent of each other at runtime.
 """
 
 import json
+import math
 import re
 import sys
 import requests
@@ -66,6 +85,10 @@ SKIP_KEYWORDS = [
 ]
 
 TICKER_RE = re.compile(r'([A-Z]{1,6}(?:[./][A-Z]{1,2})?):US')
+
+TRAIL_PERCENT = 10.0  # kept identical to politician-copy-trader/trader.py's
+                       # TRAIL_PERCENT so both scripts protect a copied
+                       # position the same way regardless of which one bought it
 
 
 def scrape_senator_trades(senator_id: str) -> list:
@@ -152,10 +175,92 @@ def should_skip(ticker: str, issuer: str) -> bool:
     return any(kw in text for kw in SKIP_KEYWORDS)
 
 
+def get_open_orders(ticker: str) -> list:
+    r = requests.get(f"{BASE_URL}/orders", headers=HEADERS,
+                      params={"status": "open", "symbols": ticker, "limit": 500}, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+def cancel_order(order_id: str):
+    r = requests.delete(f"{BASE_URL}/orders/{order_id}", headers=HEADERS, timeout=10)
+    if r.status_code not in (200, 204, 404):  # 404 = already gone, nothing to cancel
+        r.raise_for_status()
+
+
+def cancel_stops(ticker: str) -> int:
+    """Cancel any open trailing-stop sell orders on ticker. Returns how many."""
+    canceled = 0
+    for o in get_open_orders(ticker):
+        if o.get("side") == "sell" and o.get("type") == "trailing_stop":
+            cancel_order(o["id"])
+            canceled += 1
+    return canceled
+
+
+def sellable_qty(ticker: str) -> int:
+    """Whole shares held minus shares already reserved by open sell orders --
+    the most a new stop can cover without double-reserving or risking a short."""
+    pos = requests.get(f"{BASE_URL}/positions/{ticker}", headers=HEADERS, timeout=10)
+    if pos.status_code == 404:
+        return 0
+    pos.raise_for_status()
+    held = float(pos.json().get("qty", 0))
+    if held < 1:
+        return 0
+    reserved = sum(
+        float(o["qty"]) - float(o.get("filled_qty") or 0)
+        for o in get_open_orders(ticker) if o.get("side") == "sell"
+    )
+    return max(0, math.floor(held) - math.ceil(reserved))
+
+
+def submit_trailing_stop(ticker: str, qty: int) -> dict:
+    payload = {
+        "symbol":        ticker,
+        "qty":           str(qty),
+        "side":          "sell",
+        "type":          "trailing_stop",
+        "trail_percent": str(TRAIL_PERCENT),
+        "time_in_force": "gtc",
+    }
+    r = requests.post(f"{BASE_URL}/orders", headers=HEADERS, json=payload, timeout=15)
+    r.raise_for_status()
+    order = r.json()
+    log.info(f"    [STOP] {qty} shares {ticker} trailing {TRAIL_PERCENT}% | ID: {order.get('id')}")
+    return order
+
+
+def attach_protective_stops():
+    """Ensure every currently-held symbol has a trailing stop covering its
+    uncovered whole shares. Coverage is measured from open orders at the
+    broker, not local state, so this is self-healing across runs -- and
+    across both this script and the politician copy trader, since either
+    one can be the one that bought a given symbol."""
+    try:
+        r = requests.get(f"{BASE_URL}/positions", headers=HEADERS, timeout=10)
+        r.raise_for_status()
+        positions = r.json()
+    except Exception as e:
+        log.error(f"  Could not fetch positions for stop-loss pass: {e}")
+        return
+    for pos in positions:
+        ticker = pos["symbol"]
+        try:
+            qty = sellable_qty(ticker)
+            if qty >= 1:
+                submit_trailing_stop(ticker, qty)
+        except Exception as e:
+            log.error(f"  Stop-loss failed for {ticker}: {e}")
+
+
 def execute_trade(ticker: str, side: str) -> dict:
     """Place a $500 notional buy, or close the held position on a sell (never opens a short)."""
     if side.lower() == "sell":
         try:
+            canceled = cancel_stops(ticker)
+            if canceled:
+                log.info(f"    [SELL] Canceled {canceled} resting stop order(s) on {ticker} before selling.")
             pos = requests.get(f"{BASE_URL}/positions/{ticker}", headers=HEADERS, timeout=10)
             if pos.status_code == 404:
                 return {"status": "skipped (no position)"}
@@ -253,6 +358,15 @@ def run(baseline: bool = False):
         log.info(f"  Baseline: marked {len(seen_keys)} current disclosures as seen, no orders placed.")
         log.info("Run complete.\n")
         return
+
+    # Reconcile pass, independent of whether this run found any new trades --
+    # picks up a fill that wasn't covered yet, or shares bought by the other
+    # copy-trading script.
+    if market_open:
+        attach_protective_stops()
+    else:
+        log.info("  Market CLOSED — skipping stop-loss reconcile pass.")
+
     if not new_trades:
         log.info("  No new senator trades found.")
         log.info("Run complete.\n")
