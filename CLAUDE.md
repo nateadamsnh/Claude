@@ -4,7 +4,7 @@
 - Name: Nathaniel
 - Email: nate.adams.nh@gmail.com
 - Platform: Windows (use `python`, not `python3`)
-- Last updated: 2026-05-30
+- Last updated: 2026-08-27
 
 ---
 
@@ -20,8 +20,9 @@
 - Credentials: `C:\Users\Nathaniel\Documents\Trading\config\alpaca_credentials.json`
 - Broker endpoint: `https://paper-api.alpaca.markets/v2`
 - Data endpoint: `https://data.alpaca.markets`
-- API Key: PK47VMLQGKAOFSWZU3RPAMPL5M
-- **Portfolio value: $51,588.76** | **Cash: $7,276.24** (as of 2026-05-30)
+- API Key: PKVC3QNMNEPECL7LOBOPN5FFIE (**new account, created 2026-09-26** — Nathaniel deleted the old paper account and made a fresh one; the old key `PK47VMLQ…` is dead)
+- **Portfolio value: $50,000** | **Cash: $50,000** | Buying power $200,000 (fresh account, 0 positions, as of 2026-09-26)
+- Holdings turn over daily under the current live strategy (see Buy Consistent-History Losers below) — verify current value/holdings directly against Alpaca (`/v2/account`, `/v2/positions`) rather than trusting any static table in this file.
 - Options Level: 3
 
 ---
@@ -81,7 +82,7 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 ## Momentum Strategy
 
 **Location:** `C:\Users\Nathaniel\Documents\Trading\strategies\`
-**Status: LIVE** — runs via Task Scheduler ("MomentumStrategy") every 30 min Mon-Fri 9:30 AM–6 PM
+**Status: DISABLED** (2026-06-22, per "only keep the wheel" — see Wheel Strategy section; confirmed disabled in Task Scheduler as of 2026-08-27). Section below is historical.
 
 ### Files
 | File | Purpose |
@@ -114,7 +115,7 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 ## Strategy Manager (Portfolio Stop-Loss)
 
 **Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\strategy_manager.py`
-**Status: LIVE** — runs via Task Scheduler ("StrategyManager") every minute Mon-Fri 9:30 AM–6 PM
+**Status: DISABLED** (2026-06-22, per "only keep the wheel"; confirmed disabled in Task Scheduler as of 2026-08-27). Section below, including the portfolio table, is a historical snapshot — none of these holdings are current (see Buy Consistent-History Losers section for what's actually live).
 **State:** `C:\Users\Nathaniel\Documents\Trading\strategies\states\{SYMBOL}_state.json` (per symbol)
 
 ### What It Does
@@ -165,7 +166,7 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 
 ## Options / Wheel Strategy (MULTI-SYMBOL: MARA, SOFI, IONQ, DKNG)
 
-**Status: LIVE — THE ONLY ACTIVE TRADING STRATEGY** (2026-06-22 Nathaniel liquidated everything and kept only the wheel; all other trading strategies disabled).
+**Status: DISABLED** — `\Alpaca\WheelStrategy` confirmed Disabled in Task Scheduler as of 2026-08-27. Was live from 2026-06-22 (see history below) until superseded by the Buy Consistent-History Losers strategy (documented in the next section), which has been the only active strategy since at least 2026-08-03. Exact date/reason the wheel task was disabled is not recorded anywhere in this repo — if you need that, ask Nathaniel rather than assuming.
 **Script:** `strategies\options_wheel.py` — basket configured via `SYMBOLS = ["MARA","SOFI","IONQ","DKNG"]`. Each symbol runs an independent CSP→CC cycle with its own state file.
 **Task:** `\Alpaca\WheelStrategy` (every 30 min Mon-Fri 9:30 AM–6 PM)
 **State:** `strategies\{symbol}_wheel_state.json` (one per symbol)
@@ -212,6 +213,79 @@ Scans UBER, F, SMCI, DKNG, SOFI, RIVN, MARA — runs Monday 9:35 AM, emails at 9
 
 ---
 
+## Buy Consistent-History Losers Strategy
+
+**Status: RETIRED 2026-09-22 (evening)** — `\Alpaca\BuyConsistentLosers` and `\Alpaca\DynamicStopManager` Disabled at Nathaniel's direction after the news-split backtest (below) killed the last plausible repair. Nothing trades. The `ConsistentLosers` signal email and the `Heartbeat` monitor still run; expect the heartbeat to report the two disabled tasks indefinitely (that is correct — silence it by disabling `\Alpaca\Heartbeat` too, or drop those jobs from `JOBS`). **Don't re-enable without a new premise and a fresh backtest** — the code is safe now, the strategy isn't profitable.
+
+**Why it was retired.** The 2026-09-22 run (1,265 trades, signals 2024-09-03..2026-09-18) was worse than September's: mean **−0.36%/trade** (t=−3.3), PF 0.77, −0.77%/trade vs SPY (t=−6.9) while SPY returned +40.6%, and it **beat 0 of 20 random any-stock runs** (random ≥$5 averaged −0.01%). Second half worse than first (−0.46% vs −0.21%). Live parity 119/132, so the backtest models what actually traded.
+
+**The news-split test (the hypothesis that failed).** Chan-style premise: extreme moves *without* news revert, moves *with* news drift, so mixing them cancels any edge. Added `NewsChecker`/`split_by_news()`/`welch_t()` to the backtest (no look-ahead: only articles published by the signal day's close; failed lookups cached as −1 and excluded from both buckets rather than counted as "no news"). Result: **no news −0.32%/trade (t=−2.6, 921 trades) vs news −0.49% (t=−2.1, 344 trades), difference +0.17%, Welch t=+0.7.** Right direction, statistically nothing, and the no-news half is still clearly negative on its own — there is no profitable subset hiding inside the screen. Flags: `--no-news-split`, `--news-days-before N`; `news_count` is a column in `trades.csv`. Results: `backtests\results\2026-09-22_205431\`.
+
+**(Moot as of 2026-09-26: the paper account was deleted and recreated, so everything below no longer exists at the broker.)** **Left at the broker when it was turned off:** LQD 4 shares with a resting stop at $103.74 (it no longer trails — nothing is managing it), ~29 fractional sub-1-share leftovers with no stops (~$1,800), and queued market buys covering the KBR −13 / MGM −12 shorts (placed by Nathaniel 2026-09-22 evening, filling at the 09-23 open).
+
+**History: re-enabled earlier the same day** ("fix the problems and trade automatically") after the state-drift fix below; one clean scheduled manager run at 11:42 (exit 0, 1 lot, no orders), then retired that evening once the news-split result came in. Paused 2026-09-16 → 2026-09-22.
+
+**Fix (2026-09-22): the broker's holdings are the source of truth, not the state file.** `dynamic_stop_manager.py`: every sell (stop replacement, "already passed" market close, new-lot absorption) is capped by `sellable_qty()` = whole shares held − shares reserved by other open sells, read fresh right before the order; step 1b `allocate_lots_to_holdings()` retires/shrinks lots each run so their total never exceeds held whole shares; `reconcile_uncovered_positions()` counts all open sells as coverage and never adopts a short. `buy_consistent_losers.py`: skips any symbol the account is short, and sizes its safety-net trailing stop by sellable shares. `FUND_NAME_RE` now also matches issuer names (ProShares, Direxion, GraniteShares, iShares, SPDR, MiniShares, Invesco QQQ) — 110 more funds excluded, 0 operating companies (checked against the live universe; bare "Ultra"/"Vanguard"/"WisdomTree" were rejected because they hit Ultra Clean, American Vanguard, WisdomTree Inc). `dynamic_stops.json` rebuilt from live positions (27 lots → 1, LQD); pre-rebuild copy at `signals\states\dynamic_stops.2026-09-22.pre-rebuild.json`. Tests: `python -m unittest scripts.tests.test_dynamic_stop_manager` (replays the MGM and ghost-lot failures).
+
+**Stop manager opened SHORT positions, found 2026-09-16.** From 2026-09-03 the manager logged ~450 `URGENT ... leaving unprotected` errors/day while every run still ended "Run complete." Root cause: `dynamic_stops.json` kept lots whose shares were already sold (at pause time: FHB tracked 75 shares vs 0 held, M 42 vs 0, HTGC 118 vs 59, ...), and no sell path checks actual holdings before selling. Alpaca rejected most of those sells (the 403s) but not all: KBR got two 13-share stops filled 90 min apart on 2026-09-09 → short 13; MGM got a 12-share market sell with nothing held on 2026-09-14 → short 12. Also: QID (a leveraged *inverse* QQQ ETF) was bought 2026-09-14 — `FUND_NAME_RE` misses fund names without "ETF"/"Fund" in them (e.g. "ProShares UltraShort QQQ").
+
+**Historical note:** the section below was written 2026-08-27 from a Task Scheduler audit — this strategy was built and turned on without ever being added to this file.
+
+**Signal script:** `signals\consistent_losers.py` — every trading day after the close, scans the full non-OTC US equity universe (~13,000 symbols, not just Alpaca's top-50-losers screener) for today's biggest price losers that were STABLE over the prior 20 trading days (no single day's close move >±5%, no single day's volume change >±50%). The point: a stock only becomes one of the day's most extreme losers because something was already brewing, so pre-filtering to big losers first would almost always fail the "was quiet before" check — checking the whole universe instead surfaces genuine "boring stock hit by a surprise drop" events. Ranks survivors by today's % loss, keeps the top 5, emails them. Runs via Task Scheduler `\Alpaca\Signals\ConsistentLosers`, ~4:10 PM ET Mon-Fri (after close, once EOD bars settle).
+
+**Earnings filter added 2026-08-27:** the 20-day stability window is blind to a stock that dropped BECAUSE it just reported earnings (the report day itself falls outside the lookback window it checks), so a genuine earnings-driven repricing sails through looking identical to random noise. HRL and TPR (see P&L investigation above) both qualified this way and kept falling instead of reverting. Fix keyword-matches Alpaca news headlines for "earnings"/quarter-mentions in a ±3/+5 day window around the qualifying date and excludes any match. Verified against real data: reliably excludes "just reported" cases (same-day earnings coverage is heavy) and would have fully excluded all 3 of TPR's actual buy dates thanks to a lucky pre-earnings preview article; only best-effort for "about to report" on quieter names — 5 of HRL's 7 actual buys predated any earnings press coverage and would NOT have been caught. **Do not trust Alpaca's `/v1beta1/corporate-actions` endpoint for earnings data** — it doesn't support an "earnings" type at all (confirmed via a live HTTP 400); this is why `earnings_calendar.py` below has been silently non-functional the whole time it was ever enabled.
+
+**Buy script:** `scripts\buy_consistent_losers.py` — reads the prior day's qualifier list, buys the largest **whole-share** quantity worth ~$500 of each symbol, waits for fill, then attaches a **3% Alpaca-managed trailing stop** (`type: trailing_stop`, GTC) as an immediate safety net — see below, this gets superseded within minutes by the staged system.
+
+**Staged per-lot stop-loss (replaced the flat trail 2026-08-29):** Nathaniel specified a 3-stage stop instead of one fixed percent: (1) **tight** — trail 3% below the highest price since that lot's own entry; (2) once that 3% trail would reach or exceed the lot's entry price, switch to **breakeven_hold** — freeze the stop at exactly the entry price and leave it there, no further tightening; (3) once price reaches or exceeds entry price × 1.05 (+5%), switch to **wide_trail** — resume trailing, now 5% below the highest price, for the rest of the lot's life. Alpaca's native trailing_stop order type can't express freeze/resume, so this is hand-rolled in `scripts\dynamic_stop_manager.py`, which computes the target itself and replaces the resting order (cancel + resubmit a plain `stop` order) whenever the stage or target price changes. Tracked **per lot, not per symbol** — several symbols (HRL, FHB, ...) have multiple $500 buys on different days at different prices, each with its own independent stage. Runs via Task Scheduler `\Alpaca\DynamicStopManager`, every 15 min during market hours (9:35 AM–4:05 PM ET) Mon-Fri. State: `signals\states\dynamic_stops.json` (list of active lots: symbol, qty, entry_price, highest_price, stage, stop_order_id). Logs: `logs\dynamic_stop_manager.log`.
+
+**Silent three-day outage, found and fixed 2026-09-02.** Every scheduled run from 2026-08-31 through 2026-09-02 crashed partway and threw away its work, leaving 9 symbols (~$6K, including HRL's whole 141-share position) with no stop at all. Three compounding causes, all now fixed:
+1. **`datetime.fromisoformat` on Python 3.10** cannot parse Alpaca's variable-precision fractional seconds — a fill stamped `...:01.41339+00:00` (5 digits) raises `ValueError`, since 3.10 accepts only exactly 3 or 6 (3.11+ handles full ISO 8601). Failure was intermittent, depending purely on the digits in a timestamp. Now normalized via `parse_iso()`.
+2. **State was saved only at the very end of `run()`**, so any exception discarded every reconciliation and stop replacement from that run. The tell was the log re-reporting the *same* lots as CLOSED every cycle with identical prices, and never printing "Run complete." Now saved in a `finally` block.
+3. **A lot whose stop replacement had failed stayed naked forever** — with `stop_order_id: None` but an unchanged target price, the "has anything changed?" check said no and skipped it. Missing order now forces a re-place.
+
+Also added `reconcile_uncovered_positions()`, which runs last and adopts any held whole shares that no resting stop covers, anchoring them at the current price. Coverage is measured from **open stop orders at the broker, not the state file** — shares reserved by a not-yet-absorbed native trailing stop are already protected, and trying to double-stop them returns HTTP 403. This makes the system self-healing against exactly the state-vs-broker drift that caused the outage; running it now reports "GAPS: none."
+
+**Important edge case this script handles:** a stage transition computed off a stale "highest price since entry" can produce a target that's already at or above the *current* price (e.g. a stock peaked weeks ago and has since pulled back past where the new stage's trail would sit). Alpaca rejects a resting stop order priced that way (`stop price must be less than current price` — it would trigger instantly). The manager treats this as "the stop has effectively already fired" and closes the lot immediately via market order rather than leaving it silently unprotected — this is what actually happened to a MOS lot during setup (closed for a ~$65 combined gain, correctly, since it had peaked and pulled back). Migrating the 44 pre-existing lots to this system on 2026-08-29 surfaced 19 symbols (HRL, TPR, and 17 others, ~44 individual lots) where the same condition held from their *original* purchase dates — per Nathaniel's direction, those were restarted with today's price as a fresh entry anchor rather than closed, since the old flat-3% stop had already been holding them without issue. Skips if the signal is stale (>4 days old, to avoid trading on outdated data over a weekend/holiday gap) or already ran today (idempotent via `last_run` in its state file). Runs via Task Scheduler `\Alpaca\BuyConsistentLosers`, weekdays 9:31 AM ET (just after the open). This task's `StartBoundary` is **2026-08-03** — the strategy has been live since then.
+
+**Bug found and fixed 2026-08-27:** from 2026-08-03 through 2026-08-27, buys were sized by `notional` (dollar amount) instead of whole shares, which produces fractional quantities — and Alpaca's `trailing_stop` order type rejects fractional quantities (HTTP 422). Combined with the task originally running at 9:25 AM (5 min before the 9:30 open, so `wait_for_fill`'s poll window elapsed before the order could fill and the script gave up thinking the buy failed), the net effect was **70 real buy fills / $34,999 invested / 29 open positions with zero stop-loss protection ever placed**, while the script's own logs and state file (`last_bought: []`) showed "Bought 0/N" every single day. Found via a routine portfolio check, not by the strategy itself. Fixed same day: buys now use whole-share qty (so trailing stops succeed), task moved to 9:31 AM (post-open), and the 29 pre-existing naked positions were retroactively protected with 5% trailing stops on their floor whole-share quantity (a small fractional remainder per position, typically <1 share, is left uncovered — not worth a partial-share stop). Realized P&L from the bug period: $0 (nothing had ever sold); unrealized P&L at time of fix: -$673.82 (-1.93%) on $34,999.30 invested.
+
+**Volume-spike section added to the email 2026-08-31 (informational only):** a second table listing price-stable names whose volume that session was ≥3x their own prior 20-day average (min $1M traded). Stored under a **separate** state key `last_volume_spikes` — `buy_consistent_losers.py` reads only `last_qualifiers`, so nothing here is ever auto-traded. **Key design point:** this list uses *price* stability only and deliberately drops the volume-stability half of the screen. Requiring 20 days of flat volume *and then* a volume explosion is self-defeating — measured live on the 2026-08-28 session, the full screen passed 21 names with a max ratio of 1.97x and **zero** at ≥2x, because the ±50% volume rule structurally selects for stocks that can't spike. Price-stability-only passed 2,465 names (1,191 liquid) and surfaced real events (SOLS 11.4x/+12.9%, ESI 7.2x, PCG 4.6x on $140M). The losers list keeps the original full screen unchanged since it drives real orders.
+
+**ETFs/funds excluded from the spike list (`EXCLUDE_FUNDS_FROM_SPIKES`, 2026-08-31):** unfiltered, the top spikes were dominated by bond/index ETFs (IGLB, USIG, BSCT, ...) whose volume surges reflect institutional rebalancing rather than a company-specific event — 19 of 28 candidates on the 2026-08-28 session. Alpaca's asset record has **no ETF/fund flag** (verified — `class` is just `us_equity` for both), so `get_universe()` now returns `{symbol: name}` and `FUND_NAME_RE` matches on the name. It deliberately does **not** match a bare "Trust": 270 universe names are operating companies or REITs named that way (Arbor Realty Trust, Acadia Realty Trust, American Assets Trust), so blanket-matching would wrongly drop them all; "Trust" only counts alongside a fund/commodity word, which still catches holdings like "iShares Gold Trust Micro". Validated against the live universe: 22/22 known ETFs caught, 0 false positives across a control set of stocks and Trust-named REITs. After filtering, the same session yielded ESI, PCG, AEG, WIT, UNF — all real operating companies. Set the flag to `False` to include funds again.
+
+**Losers list fund-filtered too as of 2026-09-01 (`EXCLUDE_FUNDS_FROM_LOSERS`) — this one changes what gets bought.** SPY, LQD, VUG and SVXY had been qualifying as "surprise drops" and getting real orders; the portfolio holds 8 separate SPY buys and 1 LQD buy from that. An index or bond fund falling 1% is the whole market moving, not the company-specific surprise this strategy is premised on. Measured on the 2026-08-31 session: 3 of 18 loser candidates were funds (VUG, SPY, LQD) — all correctly dropped, while "Invesco LTD" (IVZ, the asset manager, not a fund) was correctly kept. Top-5 was unchanged that day because the funds ranked 12th/13th/18th by % loss — ETFs are diversified so they rarely post the biggest single-day drops. The filter therefore bites mainly on quiet days when few individual names qualify, which is exactly how those 8 SPY buys happened. **Existing SPY/LQD positions are untouched** — the filter gates new buys only; they still exit via their own staged stops.
+
+**Partial-session bug fixed 2026-08-31:** the script anchored on `calendar[-1]`, which is only the last *completed* session when it runs on schedule (~4:10 PM ET). Run at any other time — manually, or after a schedule slip — that's today's partial or not-yet-started bar, and every metric silently computes off it. Volume ratios are the worst case: a partial day's volume against full-day averages always reads low, so the volume list comes back empty rather than erroring (observed live: a run that slipped past midnight anchored on an unstarted Monday and returned ~0.1x ratios universe-wide). `resolve_anchor_index()` now consults the Alpaca clock and steps back a day when the latest calendar date hasn't closed yet.
+
+**State:** `signals\states\consistent_losers.json` (`last_qualifiers` = losers/tradeable, `last_volume_spikes` = informational), `signals\states\buy_consistent_losers.json` (buy run tracking)
+**Logs:** `logs\consistent_losers.log`, `logs\buy_consistent_losers.log`
+
+### Current holdings
+Do NOT keep a static holdings table for this strategy in this file — positions turn over daily (new $500 buys each morning, old ones exit via their trailing stop whenever it fires) and a table here would be stale within days, the exact trap already documented elsewhere in this file for `govt_contracts_state.json`-style staleness. Check Alpaca directly (`GET /v2/positions`) for current holdings. Snapshot for reference only, **as of 2026-08-27**: 29 open positions, portfolio value $47,501.58, cash $13,106.76, largest positions SPY/FHB/HRL/JPM/AMP — all built by this strategy, none inherited from the wheel or any other prior strategy.
+
+---
+
+## Heartbeat Monitor
+
+**Script:** `scripts\heartbeat.py` | **Task:** `\Alpaca\Heartbeat`, every 15 min 9:40 AM–5:10 PM ET Mon-Fri (created 2026-09-16, allowed to run on battery) | **State:** `signals\states\heartbeat.json` | **Log:** `logs\heartbeat.log` | **Tests:** `python -m unittest scripts.tests.test_heartbeat`
+
+Built because every failure of the live strategy was silent. Checks: (1) the three live tasks are enabled with exit code 0; (2) each job has a completed run as recent as its schedule demands, and its latest run didn't start without finishing; (3) any ERROR/CRITICAL log line since the last check; (4) at the broker — no short positions, every whole share covered by a resting sell order, no symbol with more shares queued to sell than held, and `dynamic_stops.json` lots matching real holdings. Emails only when the *set* of problems changes (plus a reminder every 3h while they persist, and an all-clear on recovery), and sends one daily status email after 4:45 PM on trading days — **if that daily email stops arriving, the heartbeat itself is down.**
+
+Depends on each live script logging `Run complete.` **only on a normal exit** — changed 2026-09-16 in `dynamic_stop_manager.py` (was inside a `finally`, so it logged even on a crash), `buy_consistent_losers.py` (never logged it) and `consistent_losers.py`. Keep that invariant when editing those scripts. Supersedes the wheel-era `strategies\strategy_watchdog.py` (still Disabled, checks retired strategies). While a task is Disabled the heartbeat reports that once (`{job}:state`) and skips its freshness/unfinished-run checks (2026-09-22 — the paused BuyConsistentLosers was otherwise flagged as "crashed" forever); new ERROR lines are still reported. While the strategy is paused, expect the two disabled-task alerts plus any shorts.
+
+---
+
+## Consistent-Losers Backtest
+
+**Script:** `scripts\backtest_consistent_losers.py` | **Tests:** `python -m unittest scripts.tests.test_backtest_consistent_losers` | **Cache:** `backtests\cache\` (gitignored, ~2 yrs IEX daily bars, 12,921 symbols incl. delisted) | **Results:** `backtests\results\<timestamp>\` (report.txt, trades.csv, summary.json)
+
+Imports the live thresholds, fund regex, earnings regex (`signals\consistent_losers.py`) and `compute_stage` (`scripts\dynamic_stop_manager.py`), so it can't drift from live logic; a unit test checks the vectorized screen matches live `check_stability()` cell for cell, and each run reports how many actual live picks it reproduces from `logs\buy_consistent_losers.log`. Compares against random quiet names, random names ≥$5 (same trade count and exits), SPY over each trade's window, and the same picks held 5/20 days with no stops. Earnings filter uses only news published by the signal day's close (no look-ahead). Limits: daily bars approximate the 15-min stop ratchet; split-adjusted prices (live uses raw).
+
+**First result (2026-09-16, signals 2024-09-03..2026-09-14, 10bps slippage, earnings filter on; reproduced 115/127 actual live picks):** the strategy has **no edge**. 1,249 trades, 21% win rate, mean -0.32%/trade (t=-2.9), -$1,694, profit factor 0.79, -0.71%/trade vs SPY over the same windows (t=-6.3), while SPY returned +37.7% over the period. Random quiet names with the same exits averaged -0.38% (the strategy beat 75% of 20 runs, i.e. noise), so ranking by "biggest drop" adds nothing. Random names ≥$5 did *better* (-0.04%). Same picks held 5 days with no stops: -0.25%, so the staged stop doesn't rescue it (the tight 3% stop is hit by ordinary noise; median trade -1.32%). Both halves were negative, the second one worse.
+
+---
+
 ## Markov Regime Detector
 
 **Script:** `C:\Users\Nathaniel\Documents\Trading\strategies\regime_detector.py`
@@ -236,11 +310,11 @@ Scans UBER, F, SMCI, DKNG, SOFI, RIVN, MARA — runs Monday 9:35 AM, emails at 9
 **Shared utilities:** `signal_utils.py` — logging, state load/save (atomic), email sending, shared constants
 **State files:** `signals/states/{monitor}.json` (gitignored — runtime data)
 
-### All 10 Signal Monitors
+### Signal Monitors
 | Script | Schedule | Source | What It Watches |
 |--------|----------|--------|-----------------|
 | `signal_digest.py` | 8:30 AM Mon-Fri | All | Morning summary email — portfolio + all signals |
-| `earnings_calendar.py` | 8:00 AM Mon-Fri | Alpaca corporate actions | Warns 2d and 1d before any holding reports earnings |
+| `earnings_calendar.py` | 8:00 AM Mon-Fri | Alpaca corporate actions | Warns 2d and 1d before any holding reports earnings — **confirmed broken 2026-08-27: Alpaca's corporate-actions endpoint doesn't have an "earnings" type at all (live HTTP 400), so this has silently returned nothing every run it's ever had.** If re-enabling, port it to the news-headline-matching approach in `consistent_losers.py`'s `has_nearby_earnings()` instead. |
 | `contract_awards.py` | 6:00 PM Mon-Fri | USASpending.gov | Federal contracts ≥$1M for LMT, BWXT, RKLB, PLTR, IBM, MSFT, NVDA, IONQ |
 | `insider_trades.py` | Every 2h market hours | SEC Form 4 RSS | CEO/director buying in portfolio holdings (≥$10K) |
 | `hedge_fund_13f.py` | Monday 7:00 AM | SEC EDGAR | New 13F filings from Buffett, Ackman, Burry, Citadel, etc. |
@@ -248,7 +322,10 @@ Scans UBER, F, SMCI, DKNG, SOFI, RIVN, MARA — runs Monday 9:35 AM, emails at 9
 | `etf_flows.py` | 9:45 AM Mon-Fri | Alpaca Data | Unusual volume (>2x 20d avg) in SOXX, XLE, XLK, VNQ, ITA, ARKK |
 | `short_interest.py` | Mon & Wed 7:30 AM | FINRA | Squeeze setups (SI drops >20%) or bear warnings (SI rises >30%) |
 | `unusual_options.py` | Every 30min market hours | Alpaca Options | IV spikes (>1.8x hist vol) or put/call skew >1.6 in holdings |
+| `consistent_losers.py` | ~4:10 PM Mon-Fri | Whole US equity universe (~13,000 symbols) | Stable stocks hit by a surprise drop — feeds the live Buy Consistent-History Losers strategy (see above), not just an alert |
 | ~~`senate_disclosures.py`~~ | REMOVED 2026-06-11 | Capitol Trades | Discontinued with politician copy trader — positions liquidated, task deleted |
+
+Confirmed via Task Scheduler on 2026-08-27: every monitor under `\Alpaca\Signals\` is Disabled except `ConsistentLosers` (Ready/running). This table describes what each script does, not a guarantee it's currently scheduled — verify with Task Scheduler before assuming one is running.
 
 ### Hedge Funds Tracked (13F)
 Berkshire (0001067983), Pershing Square (0001336528), Scion (0001649339),
@@ -272,15 +349,23 @@ All signal tasks live under `\Alpaca\Signals\` in Windows Task Scheduler.
 |---------|------|
 | Alpaca credentials | `config\alpaca_credentials.json` |
 | Email config | `config\email_config.json` |
+| Buy Consistent-History Losers (RETIRED 2026-09-22) | `scripts\buy_consistent_losers.py` |
+| Dynamic per-lot stop manager (RETIRED 2026-09-22) | `scripts\dynamic_stop_manager.py` |
+| **Heartbeat monitor (live)** | `scripts\heartbeat.py` |
+| Consistent-Losers backtest | `scripts\backtest_consistent_losers.py` |
+| Consistent-Losers signal (live) | `signals\consistent_losers.py` |
+| Dynamic stop state (active lots) | `signals\states\dynamic_stops.json` |
 | Politician config | `politician-copy-trader\config.json` |
 | Politician state | `politician-copy-trader\state.json` |
 | QBTS wheel state | `strategies\qbts_wheel_state.json` |
 | Regime state | `strategies\regime_state.json` |
 | Per-symbol stop states | `strategies\states\{SYMBOL}_state.json` |
 | Signal states | `signals\states\{monitor}.json` |
+| Buy-consistent-losers state | `signals\states\buy_consistent_losers.json` |
 | Copy trader log | `logs\copy_trader.log` |
 | Strategy manager log | `logs\portfolio_monitor.log` |
 | QBTS wheel log | `logs\qbts_wheel.log` |
+| Buy-consistent-losers log | `logs\buy_consistent_losers.log` |
 | Signal logs | `logs\{monitor}.log` |
 
 ---

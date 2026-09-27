@@ -5,18 +5,24 @@ logs/wheel_scan_latest.json
 # Credentials and secrets — NEVER commit these
 config/alpaca_credentials.json
 config/email_config.json
+config/email_credentials.json
 config/telegram_config.json
 config/webhook_config.json
+config/job_search_config.json
 
 # Runtime state files (change every run)
-strategies/strategy_state.json
 strategies/regime_state.json
-strategies/qbts_wheel_state.json
 strategies/*_wheel_state.json
-strategies/govt_contracts_state.json
+strategies/ledgers/
 politician-copy-trader/state.json
 signals/states/
 config/wheel_state.json
+
+# Backtest market-data cache (large, re-downloadable)
+backtests/cache/
+
+# Archived / historical — kept for reference but not tracked
+archive/
 
 # Python cache
 __pycache__/

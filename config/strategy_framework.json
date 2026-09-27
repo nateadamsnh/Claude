@@ -1,0 +1,6 @@
+{
+  "_comment": "Shared capital-weight registry for strategies trading the same Alpaca paper account. Weights are normalized across ENABLED entries only. capital_allocator.py reads this to compute each strategy's proportional share of live account buying power/equity.",
+  "strategies": [
+    {"name": "wheel", "weight": 1.0, "enabled": true}
+  ]
+}
