@@ -72,6 +72,22 @@ JOBS = {
         "header": "BUY CONSISTENT-HISTORY LOSERS  |",
         "fresh": lambda now, s: (s["open"] if now >= s["open"] + timedelta(minutes=15) else None),
     },
+    "PoliticianCopyTrader": {
+        "task": "\\Alpaca\\PoliticianCopyTrader",
+        "log": "copy_trader.log",
+        "header": "COPY TRADER  |",
+        # hourly from 9:30: once 10:45 has passed, a run must be <75 min old
+        "fresh": lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=75)
+                                 if now >= s["open"] + timedelta(minutes=75) else None),
+    },
+    "SenateDisclosures": {
+        "task": "\\Alpaca\\SenateDisclosures",
+        "log": "senate_disclosures.log",
+        "header": "SENATE DISCLOSURES  |",
+        # every 2h from 9:30: once 11:45 has passed, a run must be <135 min old
+        "fresh": lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=135)
+                                 if now >= s["open"] + timedelta(minutes=135) else None),
+    },
     "ConsistentLosers": {
         "task": "\\Alpaca\\Signals\\ConsistentLosers",
         "log": "consistent_losers.log",

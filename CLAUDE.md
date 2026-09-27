@@ -21,7 +21,7 @@
 - Broker endpoint: `https://paper-api.alpaca.markets/v2`
 - Data endpoint: `https://data.alpaca.markets`
 - API Key: PKVC3QNMNEPECL7LOBOPN5FFIE (**new account, created 2026-09-26** — Nathaniel deleted the old paper account and made a fresh one; the old key `PK47VMLQ…` is dead)
-- **Portfolio value: $50,000** | **Cash: $50,000** | Buying power $200,000 (fresh account, 0 positions, as of 2026-09-26)
+- **Portfolio value: $500,000** | **Cash: $500,000** | Buying power $2,000,000 | Options buying power $500,000 (Nathaniel funded the account up from $50,000 on 2026-09-27; 0 positions, confirmed live against `/v2/account`)
 - Holdings turn over daily under the current live strategy (see Buy Consistent-History Losers below) — verify current value/holdings directly against Alpaca (`/v2/account`, `/v2/positions`) rather than trusting any static table in this file.
 - Options Level: 3
 
@@ -29,7 +29,11 @@
 
 ## Politician Copy Trader Bot
 
-**Status: DISCONTINUED 2026-06-11** — removed at Nathaniel's request after flat performance (~-$30 net on ~$10K cycled through 24 trades). All 16 copy-trade positions liquidated at the 2026-06-12 open, "PoliticianCopyTrader" Task Scheduler task deleted. Code and state.json kept for records. The separate `signals/senate_disclosures.py` senator copy monitor was ALSO discontinued the same day (12 positions ~$3,893 liquidated, "SenateDisclosures" task deleted) — all congressional copy-trading is now shut down.
+**Status: RE-ENABLED 2026-09-26** at Nathaniel's request (paper account). `\Alpaca\PoliticianCopyTrader` (hourly Mon-Fri 9:30-18:00) and `\Alpaca\SenateDisclosures` (every 2h, same window) recreated via `scripts\register_copy_trader_tasks.ps1`; first runs 2026-09-28 9:30 AM. `signals\senate_disclosures.py` moved back out of `archive\`. Both are in the Heartbeat `JOBS`. Senate script fixes made on re-enable: the scraper now parses real trade dates/sizes (before, blank dates collapsed dedup keys); sells only close a held position (before, a sell with no position could open a short); trades seen while the market is closed are deferred, not dropped; non-200 responses now log an error; baseline seeded 2026-09-26 (82 existing disclosures marked seen, so no backlog is traded). Rounds and Hoeven legitimately show 0 trades on Capitol Trades. History below is from the first run.
+
+**Protective stop-loss added 2026-09-27** (Nathaniel asked directly: "is there a stop loss on this?" — there wasn't). Before this, nothing managed downside between a copied buy and whatever eventual sell disclosure told the strategy to exit — the "-10% loss alert" below only ever sent a notification, never closed anything. Both `politician-copy-trader\trader.py` (new `attach_protective_stops()`, called as Step 4b of `main.py`'s `run()`) and `signals\senate_disclosures.py` (duplicate local functions, same pattern, called from its own `run()`) now place a **10% Alpaca-managed GTC trailing stop** on any held whole shares not already covered by one — checked fresh against the broker's *open orders*, not local state, every run, so it self-heals across runs and across whichever of the two scripts actually bought a given symbol. Only whole shares are covered: Alpaca's `trailing_stop` order type rejects fractional quantities, and a $500 notional buy is almost always fractional, so a small remainder (typically well under $20) stays unprotected — same accepted tradeoff the retired Buy-Consistent-Losers strategy used. Both scripts' sell path now cancels any resting stop first (`cancel_stops()`), so a copied politician/senator sell isn't blocked by shares the stop already reserves. **No changes needed to Heartbeat** — its existing `check_broker()` already flags any symbol account-wide with whole shares held but no resting sell order covering them (`uncovered:{sym}`), so a silent failure in this new code would already surface there. Verified 2026-09-27: both scripts' new functions run clean against the live (0-position) account; a real test buy+cancel round-trip confirmed order placement/cancellation works, but the market was closed so a real fill-to-stop cycle wasn't observable — worth a glance at `logs\copy_trader.log` / `logs\senate_disclosures.log` after Monday's first live buy to confirm a `[STOP]` line actually appears.
+
+**Previously DISCONTINUED 2026-06-11** — removed at Nathaniel's request after flat performance (~-$30 net on ~$10K cycled through 24 trades). All 16 copy-trade positions liquidated at the 2026-06-12 open, "PoliticianCopyTrader" Task Scheduler task deleted. Code and state.json kept for records. The separate `signals/senate_disclosures.py` senator copy monitor was ALSO discontinued the same day (12 positions ~$3,893 liquidated, "SenateDisclosures" task deleted) — all congressional copy-trading is now shut down.
 
 **Location:** `C:\Users\Nathaniel\Documents\Trading\politician-copy-trader\`
 
@@ -64,7 +68,7 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 - Trade amount: **$500/trade** (fixed, scale_by_size: false)
 - Skip keywords: treasury, t-bill, bond, note, bill, mutual fund, money market, etf, trust, index, xsp, mini spx, cboe
 - Gain milestone alerts: 5%, 10%, 25%, 50%, 100%
-- Loss alert: -10%
+- Loss alert: -10% (notification only) **+ actual 10% trailing stop-loss as of 2026-09-27** — see below
 
 ### Key Technical Details
 - Trade dedup key: `{politician_id}:{ticker}|{tx_date}|{tx_type}|{size_range}`
@@ -164,10 +168,16 @@ Runs automatically via Windows Task Scheduler ("PoliticianCopyTrader") — hourl
 
 ---
 
-## Options / Wheel Strategy (MULTI-SYMBOL: MARA, SOFI, IONQ, DKNG)
+## Options / Wheel Strategy (MULTI-SYMBOL: MARA, SOFI, IONQ, DKNG, SMCI, INTC, CVNA, HOOD)
 
-**Status: DISABLED** — `\Alpaca\WheelStrategy` confirmed Disabled in Task Scheduler as of 2026-08-27. Was live from 2026-06-22 (see history below) until superseded by the Buy Consistent-History Losers strategy (documented in the next section), which has been the only active strategy since at least 2026-08-03. Exact date/reason the wheel task was disabled is not recorded anywhere in this repo — if you need that, ask Nathaniel rather than assuming.
-**Script:** `strategies\options_wheel.py` — basket configured via `SYMBOLS = ["MARA","SOFI","IONQ","DKNG"]`. Each symbol runs an independent CSP→CC cycle with its own state file.
+**Status: RE-ENABLED 2026-09-27** at Nathaniel's request (paper account). `\Alpaca\WheelStrategy` was confirmed Disabled as of 2026-08-27 (had been since some undocumented date after 2026-07-21 — see History below) and was flipped back to Ready 2026-09-27 with its existing schedule/action untouched (every 30 min, 9:30 AM–6 PM Mon-Fri, running `strategies\options_wheel.py`). First run 2026-09-28 9:30 AM ET. Was live from 2026-06-22 until superseded by the Buy Consistent-History Losers strategy (documented in the next section, now also retired) — the two strategies were never meant to run simultaneously; re-enabling the wheel does not touch Buy-Consistent-Losers/DynamicStopManager, which stay Disabled.
+**Script:** `strategies\options_wheel.py` — basket configured via `SYMBOLS = ["MARA","SOFI","IONQ","DKNG","SMCI","INTC","CVNA","HOOD"]`. Each symbol runs an independent CSP→CC cycle with its own state file.
+
+**Basket widened 2026-09-27** at Nathaniel's request — SMCI, INTC, CVNA, HOOD added to the existing 4 (MARA/SOFI/IONQ/DKNG kept, not replaced). Picked from a live options screen that day (~5% OTM put, 10–60 DTE, spread ≤25%, ranked by annualized premium yield after filtering out ≤15%-spread names and one sub-$5 name): MARA 120%, SMCI 99%, INTC 86%, CVNA 77%, HOOD 70% annualized. New symbols need no manual state setup — `load_state()` returns fresh CSP-stage defaults for any symbol without an existing `{symbol}_wheel_state.json`. `max_notional_per_symbol` in `config\wheel_limits.json` ($15,000) already caps any one symbol's exposure regardless of basket size.
+
+**Capital-fit concern from 2026-09-27 (found via a `WHEEL_DRY_RUN=1` smoke test) is now resolved.** At the account's original $50,000 balance, splitting `options_buying_power` evenly across 8 symbols (`obp / remaining`) left only ~$6,250/symbol on average, well under what INTC (~$22,140/contract with `SHORT_PUT_BP_FACTOR = 2.0`), HOOD (~$21,490), and CVNA (~$11,710) need for even 1 contract — a dry run confirmed all three logged "Insufficient budget ... Skipping" on a flat $10,000 test budget. **Nathaniel funded the account up to $500,000 the same day**, confirmed live against `/v2/account` (`options_buying_power: 500000`). An even eighth of that is ~$62,500/symbol — comfortably above every symbol's per-contract requirement — so this should no longer bind in practice. Not re-tested end to end at the new balance (market was closed); worth a glance at `logs\wheel.log` after Monday's first live run to confirm all 8 symbols are actually getting sized normally rather than something else unexpected capping them.
+
+**`strategies\wheel_candidate_scan.py` fixed 2026-09-27** — it had the same per-contract-quote bug as the original `options_wheel.py` (returns empty bid/ask on this data tier without `feed=indicative`; see Key implementation details below), just never patched when that was fixed elsewhere on 2026-06-22. So every scan silently reported "no liquid puts found" for names that actually had one. Now uses the same bulk `get_chain()` pattern, applies the same spread ≤25% filter, and its candidate universe is widened from the original 7 (UBER, F, SMCI, DKNG, SOFI, RIVN, MARA) to 25 similarly-liquid, moderately-priced, high-IV names — this is what surfaced SMCI/INTC/CVNA/HOOD above. Still not scheduled in Task Scheduler (`\Alpaca\WheelCandidateScan` / `\Alpaca\WheelCandidateEmail` both Disabled) — this was a manual, one-off screen, not a recurring job.
 **Task:** `\Alpaca\WheelStrategy` (every 30 min Mon-Fri 9:30 AM–6 PM)
 **State:** `strategies\{symbol}_wheel_state.json` (one per symbol)
 **Logs:** `logs\wheel.log` (shared)
