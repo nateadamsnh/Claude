@@ -48,6 +48,11 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from regime_detector import get_regime, regime_contracts_multiplier
 import wheel_safety
+import capital_allocator
+import order_tag
+import strategy_ledger
+
+STRATEGY_NAME = "wheel"
 
 # ── Strategy Symbols ──────────────────────────────────────────────────────────
 # The wheel runs independently on each symbol; every symbol keeps its own state
@@ -389,12 +394,13 @@ def sell_to_open(contract: dict, label: str, qty: int = NUM_CONTRACTS) -> dict:
         )
         return {"dry_run": True}   # no 'id' => callers won't mutate state
     payload = {
-        "symbol":        contract["symbol"],
-        "qty":           str(qty),
-        "side":          "sell",
-        "type":          "limit",
-        "limit_price":   str(contract["mid"]),
-        "time_in_force": "day",
+        "symbol":           contract["symbol"],
+        "qty":              str(qty),
+        "side":             "sell",
+        "type":             "limit",
+        "limit_price":      str(contract["mid"]),
+        "time_in_force":    "day",
+        "client_order_id":  order_tag.client_order_id(STRATEGY_NAME, SYMBOL),
     }
     r = requests.post(f"{BASE_URL}/orders", headers=HEADERS, json=payload, timeout=10)
     order = r.json()
@@ -420,12 +426,13 @@ def buy_to_close(contract_symbol: str, limit_price: float, label: str, qty: int)
         )
         return {"dry_run": True}   # no 'id' => callers won't mutate state
     payload = {
-        "symbol":        contract_symbol,
-        "qty":           str(qty),
-        "side":          "buy",
-        "type":          "limit",
-        "limit_price":   str(round(limit_price, 2)),
-        "time_in_force": "day",
+        "symbol":           contract_symbol,
+        "qty":              str(qty),
+        "side":             "buy",
+        "type":             "limit",
+        "limit_price":      str(round(limit_price, 2)),
+        "time_in_force":    "day",
+        "client_order_id":  order_tag.client_order_id(STRATEGY_NAME, SYMBOL),
     }
     r = requests.post(f"{BASE_URL}/orders", headers=HEADERS, json=payload, timeout=10)
     order = r.json()
@@ -557,13 +564,15 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
             state["premium_sold"]  = fill_px
             state["order_filled"]  = True
             state["total_premium"] += fill_px * 100 * qty
-            state["premium_history"].append({
+            entry = {
                 "date":     str(date.today()),
                 "type":     "CSP",
                 "contract": state["active_contract"],
                 "premium":  fill_px,
                 "total":    round(fill_px * 100 * qty, 2),
-            })
+            }
+            state["premium_history"].append(entry)
+            strategy_ledger.record(STRATEGY_NAME, {**entry, "symbol": SYMBOL})
             log.info(
                 f"  CSP confirmed filled @ ${fill_px:.2f}/sh x{qty} "
                 f"(${fill_px*100*qty:.2f} total credit) | "
@@ -592,14 +601,16 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
             qty      = state.get("active_qty") or NUM_CONTRACTS
             cost     = close_px * 100 * qty
             state["total_premium"] -= cost
-            state["premium_history"].append({
+            entry = {
                 "date":     str(date.today()),
                 "type":     "CSP-BTC",
                 "contract": state["active_contract"],
                 "premium":  -close_px,
                 "total":    round(-cost, 2),
                 "note":     "buy to close at profit target",
-            })
+            }
+            state["premium_history"].append(entry)
+            strategy_ledger.record(STRATEGY_NAME, {**entry, "symbol": SYMBOL})
             log.info(
                 f"  CSP closed early @ ${close_px:.2f}/sh x{qty} (-${cost:.2f}) | "
                 f"Net premium now: ${state['total_premium']:,.2f}. Selling new CSP next check."
@@ -788,13 +799,15 @@ def run_cc(state: dict, positions: dict, account: dict):
             state["premium_sold"]  = fill_px
             state["order_filled"]  = True
             state["total_premium"] += fill_px * 100 * qty
-            state["premium_history"].append({
+            entry = {
                 "date":     str(date.today()),
                 "type":     "CC",
                 "contract": state["active_contract"],
                 "premium":  fill_px,
                 "total":    round(fill_px * 100 * qty, 2),
-            })
+            }
+            state["premium_history"].append(entry)
+            strategy_ledger.record(STRATEGY_NAME, {**entry, "symbol": SYMBOL})
             log.info(
                 f"  CC confirmed filled @ ${fill_px:.2f}/sh x{qty} "
                 f"(${fill_px*100*qty:.2f} total credit) | "
@@ -821,14 +834,16 @@ def run_cc(state: dict, positions: dict, account: dict):
             qty      = state.get("active_qty") or NUM_CONTRACTS
             cost     = close_px * 100 * qty
             state["total_premium"] -= cost
-            state["premium_history"].append({
+            entry = {
                 "date":     str(date.today()),
                 "type":     "CC-BTC",
                 "contract": state["active_contract"],
                 "premium":  -close_px,
                 "total":    round(-cost, 2),
                 "note":     "buy to close at profit target",
-            })
+            }
+            state["premium_history"].append(entry)
+            strategy_ledger.record(STRATEGY_NAME, {**entry, "symbol": SYMBOL})
             log.info(
                 f"  CC closed early @ ${close_px:.2f}/sh x{qty} (-${cost:.2f}) | "
                 f"Net premium now: ${state['total_premium']:,.2f}. Selling new CC next check."
@@ -1014,14 +1029,16 @@ def process_symbol(cash_budget: float):
             _cost     = _close_px * 100 * _qty
             _btc_type = "CSP-BTC" if _stage == "CSP" else "CC-BTC"
             state["total_premium"] -= _cost
-            state["premium_history"].append({
+            _entry = {
                 "date":     str(date.today()),
                 "type":     _btc_type,
                 "contract": state["active_contract"],
                 "premium":  -_close_px,
                 "total":    round(-_cost, 2),
                 "note":     "buy to close at profit target",
-            })
+            }
+            state["premium_history"].append(_entry)
+            strategy_ledger.record(STRATEGY_NAME, {**_entry, "symbol": SYMBOL})
             log.info(
                 f"  {_btc_type} confirmed (pre-reconcile): {state['active_contract']} "
                 f"@ ${_close_px:.2f} x{_qty} (-${_cost:.2f}) | "
@@ -1111,19 +1128,24 @@ def run():
     # cash. Alpaca reserves options_buying_power (~half of cash here) as each
     # CSP is placed, even before fill, so we re-read it per symbol and divide by
     # the symbols still to go. This self-corrects as capital binds/frees.
+    #
+    # The wheel's OWN share of that buying power comes from capital_allocator,
+    # which splits the account across every strategy registered in
+    # config/strategy_framework.json. With only "wheel" registered, its weight
+    # normalizes to 100% and this is identical to using the raw account OBP.
     for i, sym in enumerate(SYMBOLS):
         SYMBOL     = sym
         STATE_FILE = state_file_for(sym)
         log.info(f"\n--- {sym} ---")
         try:
             acct = get_account()
-            obp  = float(acct.get("options_buying_power") or acct.get("cash") or 0)
+            obp  = capital_allocator.allocated_buying_power(STRATEGY_NAME, acct)
         except Exception as e:
             log.error(f"  {sym}: could not fetch account: {e}")
             continue
         remaining = len(SYMBOLS) - i
         budget    = obp / remaining if remaining else 0
-        log.info(f"  Options buying power ${obp:,.2f} / {remaining} left "
+        log.info(f"  Allocated options buying power ${obp:,.2f} / {remaining} left "
                  f"= ${budget:,.2f} budget")
         try:
             process_symbol(budget)

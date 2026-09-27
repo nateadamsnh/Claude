@@ -1,0 +1,24 @@
+====================================================================================================
+CONSISTENT-HISTORY LOSERS BACKTEST  |  signals 2024-09-03 .. 2026-09-14  |  feed=iex  slippage=10bps/side  earnings_filter=on
+====================================================================================================
+Strategy (staged stops) :  1249 trades | win 21% | mean -0.32% (t=-2.9) | median -1.32% | P&L $-1,694 | PF 0.79 | maxDD $1,799 | hold 7.1d | vs SPY -0.71% (t=-6.3)
+Same picks, hold 5d     :  1249 trades | win 47% | mean -0.25% (t=-2.1) | median -0.25% | P&L $-1,271 | PF 0.87 | maxDD $2,073 | hold 5.0d | vs SPY -0.47% (t=-4.0)
+Same picks, hold 20d    :  1249 trades | win 46% | mean -0.43% (t=-1.8) | median -0.49% | P&L $-2,519 | PF 0.87 | maxDD $5,085 | hold 19.3d | vs SPY -1.68% (t=-7.0)
+Random QUIET names      : mean/trade -0.38% (5-95%: -0.48% .. -0.23%) | median -1.32% | win 21% | P&L $-2,074 | strategy beats 75% of 20 random runs
+Random ANY names >=$5   : mean/trade -0.04% (5-95%: -0.20% .. +0.20%) | median -1.45% | win 24% | P&L $-222 | strategy beats 5% of 20 random runs
+SPY buy & hold (period) : +37.70%
+
+First half  :   488 trades | win 21% | mean -0.19% (t=-1.1) | median -1.16% | P&L $-360 | PF 0.88 | maxDD $1,296 | hold 8.3d | vs SPY -0.61% (t=-3.6)
+Second half :   761 trades | win 21% | mean -0.40% (t=-2.8) | median -1.45% | P&L $-1,334 | PF 0.75 | maxDD $1,439 | hold 6.3d | vs SPY -0.77% (t=-5.2)
+
+Exit reasons: stop=1023, gap=179, target_passed=27, open=20
+
+Live parity: backtest reproduced 115/127 live picks across 30 sessions (live rules changed mid-August, so early sessions differ)
+  2026-09-02  live=REYN,WM,ITW,HLT,KBR              backtest=REYN,WM,ITW,HLT,KBR
+  2026-09-03  live=REYN,CNQ,MGM                     backtest=REYN,CNQ,MGM
+  2026-09-04  live=VVX,BRO,CNQ,KBR,WM               backtest=VVX,BRO,CNQ,KBR,WM
+  2026-09-08  live=SPT,BRO,GBCI,MGM,FHB             backtest=SPT,BRO,GBCI,MGM,FHB
+  2026-09-09  live=STN,BRO,O,REYN,GBCI              backtest=STN,BRO,O,REYN,GBCI
+  2026-09-10  live=TU,OSK,GFF,CNP,EFC               backtest=TU,OSK,GFF,CNP,EFC
+  2026-09-11  live=MGM,QID,WM,BRO,GBCI              backtest=MGM,QID,WM,BRO,GBCI
+  2026-09-14  live=O,MGM,GBCI,SU                    backtest=O,MGM,GBCI,SU

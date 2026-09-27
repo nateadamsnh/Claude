@@ -8,8 +8,8 @@ bug fixes (false expiry, BTC fill-confirmation) and the new safety wiring
 Run with:
     python -m unittest tests.test_wheel_integration      (from strategies/)
 
-No network and no state files are touched: every Alpaca-touching function is
-replaced, and save_state is stubbed.
+No network and no state/ledger files are touched: every Alpaca-touching
+function is replaced, and save_state / strategy_ledger.record are stubbed.
 """
 
 import os
@@ -49,6 +49,10 @@ class WheelTestBase(unittest.TestCase):
         self.patch("SYMBOL", "SOFI")
         self.patch("BLOCK_NEW_ENTRIES", False)
         self.patch("DRY_RUN", False)
+        # never write the real ledger file — same isolation guarantee as save_state
+        orig_record = ow.strategy_ledger.record
+        ow.strategy_ledger.record = lambda *a, **k: None
+        self.addCleanup(setattr, ow.strategy_ledger, "record", orig_record)
 
 
 class TestDryRun(WheelTestBase):

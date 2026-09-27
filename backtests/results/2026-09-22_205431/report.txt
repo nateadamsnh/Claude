@@ -1,0 +1,29 @@
+====================================================================================================
+CONSISTENT-HISTORY LOSERS BACKTEST  |  signals 2024-09-03 .. 2026-09-18  |  feed=iex  slippage=10bps/side  earnings_filter=on
+====================================================================================================
+Strategy (staged stops) :  1265 trades | win 20% | mean -0.36% (t=-3.3) | median -1.36% | P&L $-1,954 | PF 0.77 | maxDD $2,004 | hold 7.0d | vs SPY -0.77% (t=-6.9)
+Same picks, hold 5d     :  1265 trades | win 46% | mean -0.29% (t=-2.4) | median -0.32% | P&L $-1,523 | PF 0.85 | maxDD $2,087 | hold 5.0d | vs SPY -0.54% (t=-4.6)
+Same picks, hold 20d    :  1265 trades | win 45% | mean -0.55% (t=-2.3) | median -0.70% | P&L $-3,228 | PF 0.84 | maxDD $5,093 | hold 19.3d | vs SPY -1.93% (t=-8.1)
+Random QUIET names      : mean/trade -0.42% (5-95%: -0.51% .. -0.32%) | median -1.37% | win 20% | P&L $-2,333 | strategy beats 70% of 20 random runs
+Random ANY names >=$5   : mean/trade -0.01% (5-95%: -0.31% .. +0.31%) | median -1.46% | win 24% | P&L $-85 | strategy beats 0% of 20 random runs
+SPY buy & hold (period) : +40.62%
+
+-- News split (articles in the 1d before the drop, through that day's close) --
+NO news at the drop     :   921 trades | win 22% | mean -0.32% (t=-2.6) | median -1.27% | P&L $-1,202 | PF 0.80 | maxDD $1,429 | hold 7.2d | vs SPY -0.74% (t=-5.9)
+NEWS at the drop        :   344 trades | win 16% | mean -0.49% (t=-2.1) | median -1.53% | P&L $-752 | PF 0.68 | maxDD $1,141 | hold 6.6d | vs SPY -0.83% (t=-3.7)
+Difference (no-news minus news): +0.17%/trade (Welch t=+0.7); 0 trade(s) unclassified
+
+First half  :   498 trades | win 21% | mean -0.21% (t=-1.2) | median -1.15% | P&L $-404 | PF 0.86 | maxDD $1,296 | hold 8.2d | vs SPY -0.64% (t=-3.8)
+Second half :   767 trades | win 20% | mean -0.46% (t=-3.2) | median -1.50% | P&L $-1,551 | PF 0.72 | maxDD $1,601 | hold 6.3d | vs SPY -0.85% (t=-5.8)
+
+Exit reasons: stop=1042, gap=182, target_passed=27, open=14
+
+Live parity: backtest reproduced 119/132 live picks across 31 sessions (live rules changed mid-August, so early sessions differ)
+  2026-09-03  live=REYN,CNQ,MGM                     backtest=REYN,CNQ,MGM
+  2026-09-04  live=VVX,BRO,CNQ,KBR,WM               backtest=VVX,BRO,CNQ,KBR,WM
+  2026-09-08  live=SPT,BRO,GBCI,MGM,FHB             backtest=SPT,BRO,GBCI,MGM,FHB
+  2026-09-09  live=STN,BRO,O,REYN,GBCI              backtest=STN,BRO,O,REYN,GBCI
+  2026-09-10  live=TU,OSK,GFF,CNP,EFC               backtest=TU,OSK,GFF,CNP,EFC
+  2026-09-11  live=MGM,QID,WM,BRO,GBCI              backtest=MGM,WM,BRO,GBCI,SU
+  2026-09-14  live=O,MGM,GBCI,SU                    backtest=O,MGM,GBCI,SU
+  2026-09-15  live=BRO,MGM,FOXA,O,KDP               backtest=BRO,MGM,FOXA,O,KDP
