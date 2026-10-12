@@ -224,6 +224,7 @@ def run():
             notifier.new_trade(pol_name, t.alpaca_symbol, t.tx_type, t.company, t.size_range)
 
     # ── Step 4: Execute pending trades if market is open ──────────────────────
+    buy_order_ids = []
     if not state["pending_trades"]:
         log.info("No pending trades to execute.")
     else:
@@ -246,6 +247,7 @@ def run():
                             log.warning(f"  Insufficient buying power for {symbol} (${amount:.2f})")
                             continue
                         order = trader.place_buy(symbol, amount)
+                        buy_order_ids.append(order.get("id"))
                         buying_power -= amount
                         state["executed_trades"].append({
                             **pending,
@@ -292,6 +294,12 @@ def run():
     # it's a reconcile pass against live positions/orders, not tied to this
     # run's own activity. See trader.attach_protective_stops() docstring.
     if trader.is_market_open():
+        if buy_order_ids:
+            # Buys placed at the open take minutes to fill; stopping before they
+            # do skips them until the next hourly run (found 2026-10-12: 10 of 13
+            # buys sat unprotected for an hour).
+            log.info(f"Waiting for {len(buy_order_ids)} buy order(s) to fill before attaching stops...")
+            trader.wait_for_fills(buy_order_ids)
         trader.attach_protective_stops()
     else:
         log.info("Market CLOSED — skipping stop-loss reconcile pass.")

@@ -246,6 +246,34 @@ def submit_trailing_stop(symbol: str, qty: int) -> dict:
     return order
 
 
+_TERMINAL_STATUSES = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced"}
+
+
+def wait_for_fills(order_ids: list, timeout: int = 300, poll: int = 10) -> bool:
+    """Block until every order id reaches a terminal status, or `timeout`
+    seconds pass. Market buys placed at the open can take several minutes to
+    fill; a stop pass run before that sees no shares and skips the symbol,
+    leaving it unprotected until the next hourly run. Returns True if all
+    settled. Kept under Heartbeat's 10-minute unfinished-run threshold."""
+    import time
+    pending = set(o for o in order_ids if o)
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        for oid in list(pending):
+            try:
+                r = requests.get(f"{BASE_URL}/orders/{oid}", headers=HEADERS, timeout=10)
+                if r.status_code == 404 or (r.ok and r.json().get("status") in _TERMINAL_STATUSES):
+                    pending.discard(oid)
+            except Exception as e:
+                log.warning(f"  wait_for_fills: could not check {oid}: {e}")
+        if pending:
+            time.sleep(poll)
+    if pending:
+        log.warning(f"  {len(pending)} buy order(s) not filled after {timeout}s -- "
+                    f"stop pass will cover whatever filled; the rest on the next run.")
+    return not pending
+
+
 def attach_protective_stops():
     """Ensure every currently-held symbol has a trailing stop covering its
     uncovered whole shares. Safe to call every run: sellable_qty() is 0 (a

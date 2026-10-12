@@ -17,8 +17,7 @@ This script reads it, and checks the broker directly, every 15 minutes:
   3. Errors -- any ERROR/CRITICAL log line written since the last check.
   4. Broker -- no short positions; every whole share is covered by a
      resting sell order; no symbol has more shares queued to sell than it
-     holds (that sell would open a short); the stop manager's tracked lots
-     match actual holdings.
+     holds (that sell would open a short).
 
 Alerts by email only when the SET of problems changes, plus a reminder
 every REMIND_HOURS while problems persist -- so a broken system nags
@@ -41,7 +40,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "signals"))
-from signal_utils import get_logger, load_state, save_state, send_signal_email, base_html, STATES_DIR
+from signal_utils import get_logger, load_state, save_state, send_signal_email, base_html
 
 BASE_DIR  = Path(__file__).parent.parent
 LOGS_DIR  = BASE_DIR / "logs"
@@ -57,21 +56,13 @@ ERROR_SAMPLES      = 3
 # Live jobs. `header` is the banner each script logs at the start of a run.
 # `fresh` returns the latest time by which a completed run must exist, given
 # now and the session's open/close, or None if nothing is due yet.
+#
+# DynamicStopManager and BuyConsistentLosers are deliberately NOT here: both
+# tasks were permanently retired 2026-09-22 and are never coming back without
+# a new premise and a fresh backtest (see CLAUDE.md). Checking them just
+# reported "Task ... is Disabled" every single run forever -- a fact that's
+# already permanently true and never actionable, not a problem to alert on.
 JOBS = {
-    "DynamicStopManager": {
-        "task": "\\Alpaca\\DynamicStopManager",
-        "log": "dynamic_stop_manager.log",
-        "header": "DYNAMIC STOP MANAGER  |",
-        # every 15 min 9:35-16:05: once 9:55 has passed, a run must be <25 min old
-        "fresh": lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=25)
-                                 if now >= s["open"] + timedelta(minutes=25) else None),
-    },
-    "BuyConsistentLosers": {
-        "task": "\\Alpaca\\BuyConsistentLosers",
-        "log": "buy_consistent_losers.log",
-        "header": "BUY CONSISTENT-HISTORY LOSERS  |",
-        "fresh": lambda now, s: (s["open"] if now >= s["open"] + timedelta(minutes=15) else None),
-    },
     "PoliticianCopyTrader": {
         "task": "\\Alpaca\\PoliticianCopyTrader",
         "log": "copy_trader.log",
@@ -93,6 +84,14 @@ JOBS = {
         "log": "consistent_losers.log",
         "header": "CONSISTENT-HISTORY LOSERS MONITOR  |",
         "fresh": lambda now, s: (s["close"] if now >= s["close"] + timedelta(minutes=25) else None),
+    },
+    "WheelStrategy": {
+        "task": "\\Alpaca\\WheelStrategy",
+        "log": "wheel.log",
+        "header": "WHEEL STRATEGY (",
+        # every 30 min 9:30-18:00: once 10:10 has passed, a run must be <40 min old
+        "fresh": lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=40)
+                                 if now >= s["open"] + timedelta(minutes=40) else None),
     },
 }
 
@@ -172,7 +171,7 @@ def check_runs(job: str, runs: list, now: datetime, session, since: datetime, fr
 
 # ── Broker checks (pure) ─────────────────────────────────────────────────────
 
-def check_broker(positions: list, open_orders: list, lots: list) -> list:
+def check_broker(positions: list, open_orders: list) -> list:
     problems = []
     held = {p["symbol"]: float(p["qty"]) for p in positions if p.get("asset_class", "us_equity") == "us_equity"}
 
@@ -184,11 +183,7 @@ def check_broker(positions: list, open_orders: list, lots: list) -> list:
         selling[o["symbol"]] = selling.get(o["symbol"], 0) + remaining
         covering[o["symbol"]] = covering.get(o["symbol"], 0) + remaining
 
-    tracked = {}
-    for lot in lots:
-        tracked[lot["symbol"]] = tracked.get(lot["symbol"], 0) + int(lot["qty"])
-
-    for sym in sorted(set(held) | set(selling) | set(tracked)):
+    for sym in sorted(set(held) | set(selling)):
         qty = held.get(sym, 0.0)
         whole = floor(qty) if qty > 0 else 0
         if qty < 0:
@@ -203,10 +198,6 @@ def check_broker(positions: list, open_orders: list, lots: list) -> list:
             problems.append((f"uncovered:{sym}",
                              f"UNPROTECTED {sym}: {whole} whole shares held, only "
                              f"{covering.get(sym, 0):g} covered by resting sell orders"))
-        if tracked.get(sym, 0) != whole:
-            problems.append((f"drift:{sym}",
-                             f"State drift {sym}: stop manager tracks {tracked.get(sym, 0)} shares, "
-                             f"broker holds {whole} whole shares"))
     return problems
 
 
@@ -295,9 +286,7 @@ def run():
         orders = requests.get(f"{base_url}/orders", headers=headers, params={"status": "open", "limit": 500}, timeout=15)
         positions.raise_for_status()
         orders.raise_for_status()
-        lots = (json.loads((STATES_DIR / "dynamic_stops.json").read_text()).get("lots", [])
-                if (STATES_DIR / "dynamic_stops.json").exists() else [])
-        problems += check_broker(positions.json(), orders.json(), lots)
+        problems += check_broker(positions.json(), orders.json())
     except Exception as e:
         problems.append(("broker", f"Could not check positions/orders at Alpaca: {e}"))
 
