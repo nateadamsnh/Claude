@@ -40,6 +40,8 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "signals"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "strategies"))
+import wheel_safety
 from signal_utils import get_logger, load_state, save_state, send_signal_email, base_html
 
 BASE_DIR  = Path(__file__).parent.parent
@@ -171,13 +173,18 @@ def check_runs(job: str, runs: list, now: datetime, session, since: datetime, fr
 
 # ── Broker checks (pure) ─────────────────────────────────────────────────────
 
-def check_broker(positions: list, open_orders: list) -> list:
+def check_broker(positions: list, open_orders: list, wheel_shares: dict = None) -> list:
+    """`wheel_shares` {symbol: shares} are owned by the options wheel, which needs them
+    unreserved for covered calls -- so they are deliberately not covered by a stop and
+    must not be reported as UNPROTECTED."""
+    wheel_shares = wheel_shares or {}
     problems = []
     held = {p["symbol"]: float(p["qty"]) for p in positions if p.get("asset_class", "us_equity") == "us_equity"}
 
     selling, covering = {}, {}
     for o in open_orders:
-        if o.get("side") != "sell":
+        # Option sell-to-open orders (the wheel's puts/calls) are not stock sells.
+        if o.get("side") != "sell" or o.get("asset_class", "us_equity") != "us_equity":
             continue
         remaining = float(o["qty"]) - float(o.get("filled_qty") or 0)
         selling[o["symbol"]] = selling.get(o["symbol"], 0) + remaining
@@ -185,7 +192,7 @@ def check_broker(positions: list, open_orders: list) -> list:
 
     for sym in sorted(set(held) | set(selling)):
         qty = held.get(sym, 0.0)
-        whole = floor(qty) if qty > 0 else 0
+        whole = max(0, (floor(qty) if qty > 0 else 0) - wheel_shares.get(sym, 0))
         if qty < 0:
             problems.append((f"short:{sym}",
                              f"SHORT position {sym}: {qty:g} shares -- this strategy never shorts; "
@@ -286,7 +293,10 @@ def run():
         orders = requests.get(f"{base_url}/orders", headers=headers, params={"status": "open", "limit": 500}, timeout=15)
         positions.raise_for_status()
         orders.raise_for_status()
-        problems += check_broker(positions.json(), orders.json())
+        pos_json = positions.json()
+        wheel_shares = {p["symbol"]: wheel_safety.wheel_reserved_shares(p["symbol"])
+                        for p in pos_json if p.get("asset_class", "us_equity") == "us_equity"}
+        problems += check_broker(pos_json, orders.json(), wheel_shares)
     except Exception as e:
         problems.append(("broker", f"Could not check positions/orders at Alpaca: {e}"))
 

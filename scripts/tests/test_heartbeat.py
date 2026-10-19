@@ -158,6 +158,23 @@ class TestCheckBroker(unittest.TestCase):
     def test_sell_order_with_no_position(self):
         self.assertIn("oversell:MGM", keys(heartbeat.check_broker([], [order("MGM", 12)])))
 
+    def test_option_sell_orders_are_not_stock_sells(self):
+        # a resting covered-call STO must not read as "5 shares sold but 0 held"
+        call = {"symbol": "MARA261106C00012000", "qty": "5", "filled_qty": "0", "side": "sell",
+                "type": "limit", "asset_class": "us_option"}
+        self.assertEqual(heartbeat.check_broker([pos("MARA", 500)], [call], {"MARA": 500}), [])
+
+    def test_wheel_owned_shares_need_no_stop(self):
+        # 2026-10-19: assigned MARA shares must stay unreserved for covered calls
+        self.assertEqual(heartbeat.check_broker([pos("MARA", 500)], [], {"MARA": 500}), [])
+
+    def test_only_the_non_wheel_part_needs_a_stop(self):
+        problems = heartbeat.check_broker([pos("INTC", 112)], [order("INTC", 5)], {"INTC": 100})
+        self.assertEqual(keys(problems), {"uncovered:INTC"})  # 12 held outside the wheel, only 5 covered
+
+    def test_wheel_shares_do_not_hide_a_short(self):
+        self.assertIn("short:MARA", keys(heartbeat.check_broker([pos("MARA", -5)], [], {"MARA": 500})))
+
     def test_partially_filled_order_counts_remaining_only(self):
         self.assertEqual(heartbeat.check_broker([pos("XOM", 6)], [order("XOM", 10, filled=4)]), [])
 

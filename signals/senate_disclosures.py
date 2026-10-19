@@ -47,8 +47,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR / "politician-copy-trader"))
+sys.path.insert(0, str(BASE_DIR / "strategies"))
 sys.path.insert(0, str(Path(__file__).parent))
 
+import wheel_safety  # pure stdlib; knows which shares the options wheel owns
 from signal_utils import (
     get_logger, load_state, save_state, send_signal_email,
     html_table, base_html
@@ -213,7 +215,10 @@ def sellable_qty(ticker: str) -> int:
         float(o["qty"]) - float(o.get("filled_qty") or 0)
         for o in get_open_orders(ticker) if o.get("side") == "sell"
     )
-    return max(0, math.floor(held) - math.ceil(reserved))
+    # Shares the options wheel owns are excluded: a stop on them makes Alpaca
+    # reject the wheel's covered calls as uncovered (found 2026-10-19).
+    whole = math.floor(held) - wheel_safety.wheel_reserved_shares(ticker)
+    return max(0, whole - math.ceil(reserved))
 
 
 def submit_trailing_stop(ticker: str, qty: int) -> dict:
