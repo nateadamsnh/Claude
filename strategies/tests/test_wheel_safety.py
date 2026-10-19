@@ -71,6 +71,34 @@ class TestLoadLimits(unittest.TestCase):
             self.assertEqual(ws.load_limits(p), ws.DEFAULT_LIMITS)
 
 
+class TestWheelOwnedShares(unittest.TestCase):
+    TODAY = date(2026, 10, 19)
+
+    def test_cc_stage_reserves_held_shares(self):
+        # the 2026-10-19 MARA case: assigned, wheel holds 500 and will sell calls
+        self.assertEqual(ws.wheel_owned_shares({"stage": "CC", "shares_held": 500}, self.TODAY), 500)
+
+    def test_csp_with_open_put_before_expiry_reserves_nothing(self):
+        state = {"stage": "CSP", "order_filled": True, "active_contract": "MARA261106P00011500", "active_qty": 5}
+        self.assertEqual(ws.wheel_owned_shares(state, self.TODAY), 0)
+
+    def test_csp_put_expired_but_not_yet_processed_reserves_possible_assignment(self):
+        # between Friday's expiry and the wheel's first Monday run the state is still CSP
+        state = {"stage": "CSP", "order_filled": True, "active_contract": "MARA261016P00011500", "active_qty": 5}
+        self.assertEqual(ws.wheel_owned_shares(state, self.TODAY), 500)
+
+    def test_fresh_state_reserves_nothing(self):
+        self.assertEqual(ws.wheel_owned_shares({"stage": "CSP", "active_contract": None}, self.TODAY), 0)
+        self.assertEqual(ws.wheel_owned_shares({}, self.TODAY), 0)
+
+    def test_unfilled_put_reserves_nothing(self):
+        state = {"stage": "CSP", "order_filled": False, "active_contract": "MARA261016P00011500", "active_qty": 5}
+        self.assertEqual(ws.wheel_owned_shares(state, self.TODAY), 0)
+
+    def test_missing_state_file_reserves_nothing(self):
+        self.assertEqual(ws.wheel_reserved_shares("NOTAWHEELSYMBOL"), 0)
+
+
 class TestEntryLimits(unittest.TestCase):
     def setUp(self):
         self.lim = dict(ws.DEFAULT_LIMITS)

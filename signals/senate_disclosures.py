@@ -39,6 +39,7 @@ import json
 import math
 import re
 import sys
+import time
 import requests
 import logging
 from datetime import datetime
@@ -46,8 +47,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR / "politician-copy-trader"))
+sys.path.insert(0, str(BASE_DIR / "strategies"))
 sys.path.insert(0, str(Path(__file__).parent))
 
+import wheel_safety  # pure stdlib; knows which shares the options wheel owns
 from signal_utils import (
     get_logger, load_state, save_state, send_signal_email,
     html_table, base_html
@@ -212,7 +215,10 @@ def sellable_qty(ticker: str) -> int:
         float(o["qty"]) - float(o.get("filled_qty") or 0)
         for o in get_open_orders(ticker) if o.get("side") == "sell"
     )
-    return max(0, math.floor(held) - math.ceil(reserved))
+    # Shares the options wheel owns are excluded: a stop on them makes Alpaca
+    # reject the wheel's covered calls as uncovered (found 2026-10-19).
+    whole = math.floor(held) - wheel_safety.wheel_reserved_shares(ticker)
+    return max(0, whole - math.ceil(reserved))
 
 
 def submit_trailing_stop(ticker: str, qty: int) -> dict:
@@ -229,6 +235,29 @@ def submit_trailing_stop(ticker: str, qty: int) -> dict:
     order = r.json()
     log.info(f"    [STOP] {qty} shares {ticker} trailing {TRAIL_PERCENT}% | ID: {order.get('id')}")
     return order
+
+
+def wait_for_fills(order_ids: list, timeout: int = 300, poll: int = 10) -> bool:
+    """Block until every order id reaches a terminal status, or `timeout`
+    seconds pass. A stop pass run before a buy fills sees no shares and skips
+    the symbol until the next run (found 2026-10-12 in the copy trader)."""
+    terminal = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced"}
+    pending = {o for o in order_ids if o}
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        for oid in list(pending):
+            try:
+                r = requests.get(f"{BASE_URL}/orders/{oid}", headers=HEADERS, timeout=10)
+                if r.status_code == 404 or (r.ok and r.json().get("status") in terminal):
+                    pending.discard(oid)
+            except Exception as e:
+                log.warning(f"  wait_for_fills: could not check {oid}: {e}")
+        if pending:
+            time.sleep(poll)
+    if pending:
+        log.warning(f"  {len(pending)} buy order(s) not filled after {timeout}s -- "
+                    f"stop pass covers what filled; the rest next run.")
+    return not pending
 
 
 def attach_protective_stops():
@@ -304,6 +333,7 @@ def run(baseline: bool = False):
     seen_keys = set(state.get("seen_keys", []))
 
     new_trades = []
+    buy_order_ids = []
 
     for senator in TRACKED_SENATORS:
         name = senator["name"]
@@ -335,6 +365,8 @@ def run(baseline: bool = False):
 
             if market_open:
                 order = execute_trade(ticker, side)
+                if side == "buy":
+                    buy_order_ids.append(order.get("id"))
                 status = order.get("status", "error")
                 log.info(f"    [{tx_type}] {ticker} — {name} | order {status}")
             else:
@@ -363,6 +395,9 @@ def run(baseline: bool = False):
     # picks up a fill that wasn't covered yet, or shares bought by the other
     # copy-trading script.
     if market_open:
+        if any(buy_order_ids):
+            log.info(f"  Waiting for {len(buy_order_ids)} buy order(s) to fill before attaching stops...")
+            wait_for_fills(buy_order_ids)
         attach_protective_stops()
     else:
         log.info("  Market CLOSED — skipping stop-loss reconcile pass.")
