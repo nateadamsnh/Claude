@@ -59,6 +59,7 @@ ERROR_SAMPLES      = 3
 # `fresh` returns the latest time by which a completed run must exist, given
 # now and the session's open/close, or None if nothing is due yet.
 #
+# WheelStrategy was retired 2026-11-05 and is likewise not here. Re-add it if re-enabled.
 # DynamicStopManager and BuyConsistentLosers are deliberately NOT here: both
 # tasks were permanently retired 2026-09-22 and are never coming back without
 # a new premise and a fresh backtest (see CLAUDE.md). Checking them just
@@ -86,14 +87,6 @@ JOBS = {
         "log": "consistent_losers.log",
         "header": "CONSISTENT-HISTORY LOSERS MONITOR  |",
         "fresh": lambda now, s: (s["close"] if now >= s["close"] + timedelta(minutes=25) else None),
-    },
-    "WheelStrategy": {
-        "task": "\\Alpaca\\WheelStrategy",
-        "log": "wheel.log",
-        "header": "WHEEL STRATEGY (",
-        # every 30 min 9:30-18:00: once 10:10 has passed, a run must be <40 min old
-        "fresh": lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=40)
-                                 if now >= s["open"] + timedelta(minutes=40) else None),
     },
 }
 
