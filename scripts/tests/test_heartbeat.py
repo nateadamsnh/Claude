@@ -26,7 +26,11 @@ def keys(problems):
 
 
 SESSION = {"open": datetime(2026, 9, 16, 9, 30), "close": datetime(2026, 9, 16, 16, 0)}
-FRESH = heartbeat.JOBS["DynamicStopManager"]["fresh"]
+
+# Generic "every 15 min" freshness lambda, used as a test double for check_runs()
+# -- not tied to any specific live job.
+FRESH = lambda now, s: (min(now, s["close"] + timedelta(minutes=5)) - timedelta(minutes=25)
+                        if now >= s["open"] + timedelta(minutes=25) else None)
 
 
 class TestParseRuns(unittest.TestCase):
@@ -115,7 +119,8 @@ class TestCheckRuns(unittest.TestCase):
         self.assertEqual(keys(problems), {"DSM:errors"})
 
     def test_buy_job_needs_a_run_today(self):
-        fresh = heartbeat.JOBS["BuyConsistentLosers"]["fresh"]
+        # generic "must have run once since today's open" freshness lambda
+        fresh = lambda now, s: (s["open"] if now >= s["open"] + timedelta(minutes=15) else None)
         now = datetime(2026, 9, 16, 10, 0)
         yesterday = [self.run_at(datetime(2026, 9, 15, 9, 31))]
         self.assertIn("B:stale", keys(heartbeat.check_runs("B", yesterday, now, SESSION, now, fresh)))
@@ -131,40 +136,47 @@ def order(sym, qty, filled=0):
     return {"symbol": sym, "qty": str(qty), "filled_qty": str(filled), "side": "sell", "type": "stop"}
 
 
-def lot(sym, qty):
-    return {"symbol": sym, "qty": qty}
-
-
 class TestCheckBroker(unittest.TestCase):
     def test_healthy(self):
-        self.assertEqual(heartbeat.check_broker([pos("KDP", 15)], [order("KDP", 15)], [lot("KDP", 15)]), [])
+        self.assertEqual(heartbeat.check_broker([pos("KDP", 15)], [order("KDP", 15)]), [])
 
     def test_fractional_remainder_is_not_a_problem(self):
         self.assertEqual(heartbeat.check_broker([pos("CVX", 3.437), pos("SPY", 0.187)],
-                                                [order("CVX", 2), order("CVX", 1)],
-                                                [lot("CVX", 2), lot("CVX", 1)]), [])
+                                                [order("CVX", 2), order("CVX", 1)]), [])
 
     def test_short_position(self):
-        self.assertIn("short:KBR", keys(heartbeat.check_broker([pos("KBR", -13)], [], [])))
+        self.assertIn("short:KBR", keys(heartbeat.check_broker([pos("KBR", -13)], [])))
 
     def test_uncovered_shares(self):
-        self.assertIn("uncovered:HRL", keys(heartbeat.check_broker([pos("HRL", 141)], [order("HRL", 100)],
-                                                                   [lot("HRL", 141)])))
+        self.assertIn("uncovered:HRL", keys(heartbeat.check_broker([pos("HRL", 141)], [order("HRL", 100)])))
 
     def test_sell_orders_exceed_holdings(self):
         # the KBR failure: two stops for 13 shares each against 13 held
-        problems = heartbeat.check_broker([pos("KBR", 13)], [order("KBR", 13), order("KBR", 13)], [lot("KBR", 13)])
+        problems = heartbeat.check_broker([pos("KBR", 13)], [order("KBR", 13), order("KBR", 13)])
         self.assertIn("oversell:KBR", keys(problems))
 
     def test_sell_order_with_no_position(self):
-        self.assertIn("oversell:MGM", keys(heartbeat.check_broker([], [order("MGM", 12)], [])))
+        self.assertIn("oversell:MGM", keys(heartbeat.check_broker([], [order("MGM", 12)])))
+
+    def test_option_sell_orders_are_not_stock_sells(self):
+        # a resting covered-call STO must not read as "5 shares sold but 0 held"
+        call = {"symbol": "MARA261106C00012000", "qty": "5", "filled_qty": "0", "side": "sell",
+                "type": "limit", "asset_class": "us_option"}
+        self.assertEqual(heartbeat.check_broker([pos("MARA", 500)], [call], {"MARA": 500}), [])
+
+    def test_wheel_owned_shares_need_no_stop(self):
+        # 2026-10-19: assigned MARA shares must stay unreserved for covered calls
+        self.assertEqual(heartbeat.check_broker([pos("MARA", 500)], [], {"MARA": 500}), [])
+
+    def test_only_the_non_wheel_part_needs_a_stop(self):
+        problems = heartbeat.check_broker([pos("INTC", 112)], [order("INTC", 5)], {"INTC": 100})
+        self.assertEqual(keys(problems), {"uncovered:INTC"})  # 12 held outside the wheel, only 5 covered
+
+    def test_wheel_shares_do_not_hide_a_short(self):
+        self.assertIn("short:MARA", keys(heartbeat.check_broker([pos("MARA", -5)], [], {"MARA": 500})))
 
     def test_partially_filled_order_counts_remaining_only(self):
-        self.assertEqual(heartbeat.check_broker([pos("XOM", 6)], [order("XOM", 10, filled=4)], [lot("XOM", 6)]), [])
-
-    def test_state_drift(self):
-        problems = heartbeat.check_broker([pos("WM", 2)], [order("WM", 2)], [lot("WM", 2), lot("WM", 2)])
-        self.assertEqual(keys(problems), {"drift:WM"})
+        self.assertEqual(heartbeat.check_broker([pos("XOM", 6)], [order("XOM", 10, filled=4)]), [])
 
 
 if __name__ == "__main__":

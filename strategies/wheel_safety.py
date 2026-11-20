@@ -172,6 +172,46 @@ def reconcile_symbol(symbol: str, state: dict, positions: dict, today: date = No
 # Hard limits
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Shares the wheel owns (so other strategies leave them alone)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def wheel_owned_shares(state: dict, today: date = None) -> int:
+    """Shares of the underlying that belong to the wheel, from its state dict.
+
+    The wheel's covered-call stage needs those shares *unreserved*: a resting
+    sell order (e.g. the copy traders' trailing stop) makes Alpaca treat a call
+    on them as uncovered and reject it (403, "not eligible to trade uncovered
+    option contracts"), and a stop firing would sell shares the wheel is
+    managing. So the stop-loss passes and the Heartbeat coverage check must not
+    count them.
+
+      - CC stage: the shares it holds (`shares_held`).
+      - CSP stage with a filled short put at/after expiration: that put may have
+        been assigned and the wheel hasn't noticed yet (it runs every 30 min),
+        so reserve 100 * contracts until it clears the state.
+    """
+    today = today or date.today()
+    if state.get("stage") == "CC":
+        return int(state.get("shares_held") or 0)
+    contract = state.get("active_contract")
+    if state.get("stage") == "CSP" and state.get("order_filled") and contract:
+        info = parse_occ(contract)
+        if info and info["expiration"] <= today:
+            return 100 * int(state.get("active_qty") or 0)
+    return 0
+
+
+def wheel_reserved_shares(symbol: str, today: date = None) -> int:
+    """`wheel_owned_shares` for `symbol`, read from its state file. 0 if the
+    symbol isn't in the wheel or the file is missing/unreadable."""
+    path = Path(__file__).parent / f"{symbol.lower()}_wheel_state.json"
+    try:
+        return wheel_owned_shares(json.loads(path.read_text()), today)
+    except (OSError, ValueError):
+        return 0
+
+
 @dataclass
 class LimitCheck:
     allowed: bool

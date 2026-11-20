@@ -18,6 +18,7 @@ blocked by shares the stop already has reserved.
 import json
 import logging
 import math
+import sys
 import requests
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,9 @@ log = logging.getLogger(__name__)
 
 BASE_DIR    = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config" / "alpaca_credentials.json"
+
+sys.path.insert(0, str(BASE_DIR / "strategies"))
+import wheel_safety  # pure stdlib; knows which shares the options wheel owns
 
 with open(CONFIG_FILE) as f:
     _creds = json.load(f)
@@ -215,7 +219,10 @@ def cancel_stops(symbol: str) -> int:
 def sellable_qty(symbol: str) -> int:
     """Whole shares held minus shares already reserved by open sell orders --
     the most a new stop can cover without double-reserving or risking a
-    short. Floors fractional holdings down (see module docstring)."""
+    short. Floors fractional holdings down (see module docstring). Shares the
+    options wheel owns are excluded: a stop on them blocks the wheel's covered
+    calls (Alpaca rejects the call as uncovered) -- found 2026-10-19 on
+    assigned MARA/SOFI/DKNG."""
     position = get_position(symbol)
     held = float(position["qty"]) if position else 0.0
     if held < 1:
@@ -224,7 +231,8 @@ def sellable_qty(symbol: str) -> int:
         float(o["qty"]) - float(o.get("filled_qty") or 0)
         for o in get_open_orders(symbol) if o.get("side") == "sell"
     )
-    return max(0, math.floor(held) - math.ceil(reserved))
+    whole = math.floor(held) - wheel_safety.wheel_reserved_shares(symbol)
+    return max(0, whole - math.ceil(reserved))
 
 
 def submit_trailing_stop(symbol: str, qty: int) -> dict:
@@ -244,6 +252,34 @@ def submit_trailing_stop(symbol: str, qty: int) -> dict:
         f"ID: {order.get('id')} | Status: {order.get('status')}"
     )
     return order
+
+
+_TERMINAL_STATUSES = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced"}
+
+
+def wait_for_fills(order_ids: list, timeout: int = 300, poll: int = 10) -> bool:
+    """Block until every order id reaches a terminal status, or `timeout`
+    seconds pass. Market buys placed at the open can take several minutes to
+    fill; a stop pass run before that sees no shares and skips the symbol,
+    leaving it unprotected until the next hourly run. Returns True if all
+    settled. Kept under Heartbeat's 10-minute unfinished-run threshold."""
+    import time
+    pending = set(o for o in order_ids if o)
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        for oid in list(pending):
+            try:
+                r = requests.get(f"{BASE_URL}/orders/{oid}", headers=HEADERS, timeout=10)
+                if r.status_code == 404 or (r.ok and r.json().get("status") in _TERMINAL_STATUSES):
+                    pending.discard(oid)
+            except Exception as e:
+                log.warning(f"  wait_for_fills: could not check {oid}: {e}")
+        if pending:
+            time.sleep(poll)
+    if pending:
+        log.warning(f"  {len(pending)} buy order(s) not filled after {timeout}s -- "
+                    f"stop pass will cover whatever filled; the rest on the next run.")
+    return not pending
 
 
 def attach_protective_stops():

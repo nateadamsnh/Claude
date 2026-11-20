@@ -537,7 +537,7 @@ def run_csp(state: dict, positions: dict, account: dict, cash_budget: float):
         lc = wheel_safety.check_entry_limits(
             SYMBOL, contract["strike"], contracts_to_sell, contract["mid"], LIMITS)
         if not lc.allowed:
-            log.error(f"  ⛔ LIMIT BLOCK (CSP): {lc.reason} — not selling.")
+            log.warning(f"  ⛔ LIMIT BLOCK (CSP): {lc.reason} — not selling.")
             return
 
         log.info(
@@ -771,7 +771,7 @@ def run_cc(state: dict, positions: dict, account: dict):
         lc = wheel_safety.check_entry_limits(
             SYMBOL, contract["strike"], cc_qty, contract["mid"], LIMITS)
         if not lc.allowed:
-            log.error(f"  ⛔ LIMIT BLOCK (CC): {lc.reason} — not selling.")
+            log.warning(f"  ⛔ LIMIT BLOCK (CC): {lc.reason} — not selling.")
             return
 
         log.info(
@@ -1107,6 +1107,7 @@ def run():
 
     if not market_is_open():
         log.info("Market is closed. No action taken.")
+        log.info("Run complete.\n")
         return
 
     # ── Daily-loss kill-switch — blocks NEW entries account-wide for this run ──

@@ -39,6 +39,7 @@ import json
 import math
 import re
 import sys
+import time
 import requests
 import logging
 from datetime import datetime
@@ -46,8 +47,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE_DIR / "politician-copy-trader"))
+sys.path.insert(0, str(BASE_DIR / "strategies"))
 sys.path.insert(0, str(Path(__file__).parent))
 
+import wheel_safety  # pure stdlib; knows which shares the options wheel owns
 from signal_utils import (
     get_logger, load_state, save_state, send_signal_email,
     html_table, base_html
@@ -91,9 +94,28 @@ TRAIL_PERCENT = 10.0  # kept identical to politician-copy-trader/trader.py's
                        # position the same way regardless of which one bought it
 
 
-def scrape_senator_trades(senator_id: str) -> list:
-    """Scrape Capitol Trades for a senator's recent trades."""
-    url = f"https://www.capitoltrades.com/trades?politician={senator_id}&sortBy=-txDate&pageSize=20"
+def _parse_cap_date(raw: str) -> str:
+    """'9 Nov 2026' / '8 Sept 2026' -> '2026-11-09'; '' if it isn't a date."""
+    raw = raw.strip().replace("Sept", "Sep")
+    try:
+        return datetime.strptime(raw, "%d %b %Y").strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
+
+
+def scrape_senator_trades(senator_id: str, expected_name: str = "") -> list:
+    """Scrape a senator's recent trades from their own Capitol Trades profile page.
+
+    2026-11-20: the old /trades?politician=ID URL stopped filtering -- every ID
+    returned the same unfiltered global feed (other legislators' trades), and
+    this script traded them as if they were these senators'. The /politicians/ID
+    page is genuinely per-person; its <h1> is checked against `expected_name`
+    so a future change that serves the wrong person returns nothing (and logs an
+    error that Heartbeat picks up) instead of trading. Row cells are read by
+    column: Traded Issuer | Published | Traded | Filed After | Type | Size.
+    """
+    from bs4 import BeautifulSoup
+    url = f"https://www.capitoltrades.com/politicians/{senator_id}"
     try:
         r = requests.get(url, timeout=15, headers={
             "User-Agent": "Mozilla/5.0",
@@ -103,65 +125,35 @@ def scrape_senator_trades(senator_id: str) -> list:
             log.error(f"Capitol Trades returned HTTP {r.status_code} for senator {senator_id}")
             return []
 
-        trades = []
-        # Try __NEXT_DATA__ JSON first
-        next_data = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.DOTALL)
-        if next_data:
-            try:
-                data = json.loads(next_data.group(1))
-                props = data.get("props", {}).get("pageProps", {})
-                raw_trades = props.get("trades", props.get("data", {}).get("trades", []))
-                if isinstance(raw_trades, list):
-                    for t in raw_trades:
-                        ticker_match = TICKER_RE.search(str(t))
-                        if not ticker_match:
-                            continue
-                        ticker = ticker_match.group(1).replace("/", ".").upper()
-                        tx_type = str(t.get("type", t.get("txType", ""))).upper()
-                        if "BUY" in tx_type or "PURCHASE" in tx_type:
-                            tx_type = "BUY"
-                        elif "SELL" in tx_type or "SALE" in tx_type:
-                            tx_type = "SELL"
-                        else:
-                            continue
-                        trades.append({
-                            "ticker":  ticker,
-                            "tx_type": tx_type,
-                            "tx_date": str(t.get("txDate", t.get("date", ""))),
-                            "size":    str(t.get("size", t.get("amount", ""))),
-                            "issuer":  str(t.get("issuer", {}).get("name", ticker) if isinstance(t.get("issuer"), dict) else t.get("issuer", ticker)),
-                        })
-                return trades
-            except Exception:
-                pass
+        soup = BeautifulSoup(r.text, "html.parser")
+        if expected_name:
+            h1 = soup.find("h1")
+            got = h1.get_text(strip=True) if h1 else ""
+            if got.lower() != expected_name.lower():
+                log.error(f"Capitol Trades page for {senator_id} is '{got}', expected "
+                          f"'{expected_name}' -- not using it")
+                return []
 
-        # HTML table fallback: read the row's visible text, not its markup
-        for row in re.findall(r'<tr[^>]*>(.*?)</tr>', r.text, re.DOTALL):
-            ticker_match = TICKER_RE.search(row)
+        trades = []
+        for row in soup.select("table tbody tr"):
+            cells = [c.get_text(" ", strip=True) for c in row.find_all("td")]
+            if len(cells) < 6:
+                continue
+            issuer_cell, _published, traded, _after, tx, size = cells[:6]
+            ticker_match = TICKER_RE.search(issuer_cell)
             if not ticker_match:
                 continue
-            ticker = ticker_match.group(1).replace("/", ".").upper()
-            tokens = [t.strip() for t in re.sub(r'<[^>]+>', '\n', row).split('\n') if t.strip()]
-            text = " ".join(tokens)
-            type_m = re.search(r'\b(buy|sell)\b', text, re.IGNORECASE)
-            if not type_m:
+            tx_date = _parse_cap_date(traded)
+            tx_l = tx.lower()
+            if not tx_date or tx_l not in ("buy", "sell"):
                 continue
-            tx_type = type_m.group(1).upper()
-            # Row shows "<published d Mon yyyy> <traded d Mon yyyy>"; the second is the trade date
-            dates = re.findall(r'\b(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})\b', text)
-            tx_date = "-".join(dates[1]) if len(dates) > 1 else ""
-            size_m = re.search(r'\b\d+[KM]?[–-]\d+[KM]\b', text)
-            issuer = ticker
-            for i, tok in enumerate(tokens):
-                if TICKER_RE.fullmatch(tok) and i > 0:
-                    issuer = tokens[i - 1]
-                    break
+            size_m = re.search(r'\d+[KM]?\s*[–\-]\s*\d+[KM]', size)
             trades.append({
-                "ticker":  ticker,
-                "tx_type": tx_type,
+                "ticker":  ticker_match.group(1).replace("/", ".").upper(),
+                "tx_type": tx_l.upper(),
                 "tx_date": tx_date,
                 "size":    size_m.group(0) if size_m else "",
-                "issuer":  issuer,
+                "issuer":  TICKER_RE.sub("", issuer_cell).strip(" :|"),
             })
         return trades
 
@@ -212,7 +204,10 @@ def sellable_qty(ticker: str) -> int:
         float(o["qty"]) - float(o.get("filled_qty") or 0)
         for o in get_open_orders(ticker) if o.get("side") == "sell"
     )
-    return max(0, math.floor(held) - math.ceil(reserved))
+    # Shares the options wheel owns are excluded: a stop on them makes Alpaca
+    # reject the wheel's covered calls as uncovered (found 2026-10-19).
+    whole = math.floor(held) - wheel_safety.wheel_reserved_shares(ticker)
+    return max(0, whole - math.ceil(reserved))
 
 
 def submit_trailing_stop(ticker: str, qty: int) -> dict:
@@ -229,6 +224,29 @@ def submit_trailing_stop(ticker: str, qty: int) -> dict:
     order = r.json()
     log.info(f"    [STOP] {qty} shares {ticker} trailing {TRAIL_PERCENT}% | ID: {order.get('id')}")
     return order
+
+
+def wait_for_fills(order_ids: list, timeout: int = 300, poll: int = 10) -> bool:
+    """Block until every order id reaches a terminal status, or `timeout`
+    seconds pass. A stop pass run before a buy fills sees no shares and skips
+    the symbol until the next run (found 2026-10-12 in the copy trader)."""
+    terminal = {"filled", "canceled", "expired", "rejected", "done_for_day", "replaced"}
+    pending = {o for o in order_ids if o}
+    deadline = time.time() + timeout
+    while pending and time.time() < deadline:
+        for oid in list(pending):
+            try:
+                r = requests.get(f"{BASE_URL}/orders/{oid}", headers=HEADERS, timeout=10)
+                if r.status_code == 404 or (r.ok and r.json().get("status") in terminal):
+                    pending.discard(oid)
+            except Exception as e:
+                log.warning(f"  wait_for_fills: could not check {oid}: {e}")
+        if pending:
+            time.sleep(poll)
+    if pending:
+        log.warning(f"  {len(pending)} buy order(s) not filled after {timeout}s -- "
+                    f"stop pass covers what filled; the rest next run.")
+    return not pending
 
 
 def attach_protective_stops():
@@ -304,10 +322,11 @@ def run(baseline: bool = False):
     seen_keys = set(state.get("seen_keys", []))
 
     new_trades = []
+    buy_order_ids = []
 
     for senator in TRACKED_SENATORS:
         name = senator["name"]
-        trades = scrape_senator_trades(senator["id"])
+        trades = scrape_senator_trades(senator["id"], name)
         log.info(f"  {name}: {len(trades)} trades fetched")
 
         for t in trades:
@@ -335,6 +354,8 @@ def run(baseline: bool = False):
 
             if market_open:
                 order = execute_trade(ticker, side)
+                if side == "buy":
+                    buy_order_ids.append(order.get("id"))
                 status = order.get("status", "error")
                 log.info(f"    [{tx_type}] {ticker} — {name} | order {status}")
             else:
@@ -363,6 +384,9 @@ def run(baseline: bool = False):
     # picks up a fill that wasn't covered yet, or shares bought by the other
     # copy-trading script.
     if market_open:
+        if any(buy_order_ids):
+            log.info(f"  Waiting for {len(buy_order_ids)} buy order(s) to fill before attaching stops...")
+            wait_for_fills(buy_order_ids)
         attach_protective_stops()
     else:
         log.info("  Market CLOSED — skipping stop-loss reconcile pass.")
