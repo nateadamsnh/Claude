@@ -61,6 +61,9 @@ NOTIFY_GAIN      = NOTIF_CFG.get("notify_gain", True)
 GAIN_MILESTONES  = sorted(NOTIF_CFG.get("gain_milestones_pct", [5, 10, 25, 50, 100]))
 
 
+SCRAPER_VERSION = 2   # bump to force a no-trade baseline run after a scraper change
+
+
 # ── State ──────────────────────────────────────────────────────────────────────
 
 def load_state() -> dict:
@@ -158,6 +161,18 @@ def run():
     seen_keys = set(state["seen_trade_keys"])
     all_new   = []
 
+    # 2026-11-20: the scraper now reads each politician's own page (see
+    # scraper.fetch_trades). Everything shown there carries real dates, so its
+    # keys differ from every key saved before, and the whole history would look
+    # "new" and be traded. The first run on the new scraper therefore only
+    # records what is already on the pages (no trading) and drops any queue
+    # built from the old, wrongly-attributed feed.
+    baseline_run = state.get("scraper_version") != SCRAPER_VERSION
+    baseline_ok  = True
+    if baseline_run:
+        log.warning("Scraper changed -- baseline run: recording current disclosures, trading nothing.")
+        state["pending_trades"] = []
+
     # ── Step 1: Scrape all politicians ────────────────────────────────────────
     for pol in POLITICIANS:
         pol_id   = pol["id"]
@@ -167,9 +182,10 @@ def run():
         log.info(f"\n-- {pol_name}{ret_str} --")
 
         try:
-            trades = scraper.fetch_trades(pol_id, page_size=20)
+            trades = scraper.fetch_trades(pol_id, page_size=20, expected_name=pol_name)
         except Exception as e:
             log.warning(f"  Scrape failed for {pol_name}: {e}")
+            baseline_ok = False
             continue
 
         for t in trades:
@@ -181,6 +197,8 @@ def run():
                 continue
 
             seen_keys.add(full_key)
+            if baseline_run:
+                continue
 
             if not t.is_tradeable(SKIP_KEYWORDS):
                 log.info(f"  [SKIP] {t.ticker} ({t.company}) — not tradeable")
@@ -193,6 +211,9 @@ def run():
             all_new.append((pol_name, t))
 
     state["seen_trade_keys"] = list(seen_keys)
+    if baseline_run and baseline_ok:
+        state["scraper_version"] = SCRAPER_VERSION
+        log.info(f"  Baseline recorded ({len(seen_keys)} keys). Normal trading resumes next run.")
 
     # ── Step 2: Queue new trades ──────────────────────────────────────────────
     pending_keys = {p["unique_key"] for p in state["pending_trades"]}

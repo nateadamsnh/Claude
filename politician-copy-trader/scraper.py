@@ -60,7 +60,7 @@ class PoliticianTrade:
 
 
 def _parse_date(raw: str) -> str:
-    raw = raw.strip()
+    raw = raw.strip().replace("Sept", "Sep")
     for fmt in ("%d %b %Y", "%Y-%m-%d", "%b %d, %Y", "%m/%d/%Y", "%d/%m/%Y"):
         try:
             return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
@@ -69,19 +69,28 @@ def _parse_date(raw: str) -> str:
     return raw
 
 
-def fetch_trades(politician_id: str, page_size: int = 20) -> List[PoliticianTrade]:
-    url = (
-        f"https://www.capitoltrades.com/trades"
-        f"?politician={politician_id}&sortBy=-txDate&pageSize={page_size}"
-    )
+def fetch_trades(politician_id: str, page_size: int = 20,
+                 expected_name: Optional[str] = None) -> List[PoliticianTrade]:
+    """Fetch a politician's most recent trades from their own profile page.
+
+    2026-11-20: the old /trades?politician=ID URL silently stopped filtering --
+    Capitol Trades returned the same unfiltered global feed (Thomas Kean Jr,
+    Steve Cohen, ...) for every ID, and the bot copied those trades as if they
+    were Pelosi's/Fields's/Khanna's. The /politicians/ID page is genuinely
+    per-person, and the page's <h1> is checked against `expected_name` so a
+    future change that serves the wrong person raises instead of trading.
+    """
+    url = f"https://www.capitoltrades.com/politicians/{politician_id}"
     log.info(f"Fetching: {url}")
     resp = requests.get(url, headers=_HEADERS, timeout=30)
     resp.raise_for_status()
 
-    trades = _try_next_data(resp.text)
-    if trades is not None:
-        log.info(f"Parsed {len(trades)} trades via __NEXT_DATA__")
-        return trades
+    if expected_name:
+        h1 = BeautifulSoup(resp.text, "html.parser").find("h1")
+        got = h1.get_text(strip=True) if h1 else ""
+        if got.lower() != expected_name.lower():
+            raise ValueError(f"page for {politician_id} is '{got}', expected '{expected_name}' "
+                             f"-- refusing to use it")
 
     trades = _try_html_table(resp.text)
     log.info(f"Parsed {len(trades)} trades via HTML table")
@@ -196,56 +205,39 @@ _SIZE_RE = re.compile(r"\$?(\d+(?:\.\d+)?[KMB])\s*[-–]\s*\$?(\d+(?:\.\d+)?[KMB
 _PRICE_RE = re.compile(r"\$(\d[\d,]*\.\d{2})")
 
 
+_COLS = ("issuer", "published", "traded", "filed_after", "type", "size")
+
+
 def _parse_html_row(row) -> Optional[PoliticianTrade]:
-    text = row.get_text(" | ", strip=True)
-    cells = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-    if len(cells) < 4:
+    """Politician-page row: Traded Issuer | Published | Traded | Filed After |
+    Type | Size | (link). Cells are read by position, never by regex over the
+    whole row, so a column change fails loudly (returns None) instead of
+    producing blank dates."""
+    cells = [c.get_text(" ", strip=True) for c in row.find_all("td")]
+    if len(cells) < len(_COLS):
         return None
+    issuer, published, traded, _, tx, size = cells[:6]
 
-    # Ticker — prefer the full match including slashes (BRK/B:US)
-    ticker_match = _TICKER_RE.search(text)
-    if ticker_match:
-        # group(0) is full match e.g. "BRK/B:US", group(1) is just the symbol part
-        ticker = ticker_match.group(0)  # e.g. "BRK/B:US"
-    else:
-        ticker = "N/A"
+    ticker_match = _TICKER_RE.search(issuer)
+    ticker = ticker_match.group(0) if ticker_match else "N/A"
+    company = _TICKER_RE.sub("", issuer).replace("N/A", "").strip(" :|") or "Unknown"
 
-    # Company name — strip ticker suffix from the cell
-    company = cells[1] if len(cells) > 1 else "Unknown"
-    company = _TICKER_RE.sub("", company).strip(" :|")
-    if not company:
-        company = "Unknown"
+    tx_date = _parse_date(traded)
+    filed_date = _parse_date(published)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", tx_date):
+        return None   # no usable trade date: never trade (or dedup) on it
 
-    # Dates — try "28 Apr 2026" format first, then ISO "2026-04-28"
-    dates = _DATE_RE.findall(text)
-    if not dates:
-        dates = _ISO_DATE_RE.findall(text)
-    filed_date = _parse_date(dates[0]) if dates else ""
-    tx_date = _parse_date(dates[1]) if len(dates) > 1 else filed_date
-
-    # Transaction type
-    text_lower = text.lower()
-    if "sell" in text_lower or "exchange" in text_lower:
+    tx_lower = tx.lower()
+    if "sell" in tx_lower or "exchange" in tx_lower:
         tx_type = "sell"
-    elif "buy" in text_lower or "purchase" in text_lower:
+    elif "buy" in tx_lower or "purchase" in tx_lower:
         tx_type = "buy"
     else:
         return None
 
-    # Size range
-    size_match = _SIZE_RE.search(text)
+    size_match = _SIZE_RE.search(size)
     size_range = f"{size_match.group(1)}-{size_match.group(2)}" if size_match else ""
 
-    # Price
-    price_match = _PRICE_RE.search(text)
-    price = float(price_match.group(1).replace(",", "")) if price_match else None
-
-    return PoliticianTrade(
-        ticker=ticker,
-        company=company,
-        tx_date=tx_date,
-        filed_date=filed_date,
-        tx_type=tx_type,
-        size_range=size_range,
-        price=price,
-    )
+    return PoliticianTrade(ticker=ticker, company=company, tx_date=tx_date,
+                           filed_date=filed_date, tx_type=tx_type,
+                           size_range=size_range, price=None)
